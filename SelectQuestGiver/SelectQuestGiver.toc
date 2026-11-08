@@ -1,0 +1,29 @@
+## Interface: 16001
+## Title: Select Quest Giver
+## Notes: Ctrl+click Questie minimap pins to target NPCs, plus a button to hunt quest mobs.
+## Author: Drew Killion
+## Version: 1.1.0
+## OptionalDeps: Questie
+## SavedVariables: SelectQuestGiverDB
+## SavedVariablesPerCharacter: SelectQuestGiverCharDB
+
+Core.lua
+
+# Questie adapters
+Providers/QuestiePinProvider.lua
+Providers/QuestieQuestProvider.lua
+
+# Minimap Ctrl+click targeting
+SecureTargetButton.lua
+HoverController.lua
+TooltipHint.lua
+
+# Quest hunt button
+Hunt/HuntMacroBuilder.lua
+Hunt/HuntSelection.lua
+Hunt/HuntMenu.lua
+Hunt/HuntButton.lua
+Hunt/HuntController.lua
+
+Options/OptionsPanel.lua
+Init.lua

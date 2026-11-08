@@ -1,0 +1,4 @@
+<Bindings>
+    <Binding name="CLICK SelectQuestGiverHuntButton:LeftButton" category="Select Quest Giver">
+    </Binding>
+</Bindings>
