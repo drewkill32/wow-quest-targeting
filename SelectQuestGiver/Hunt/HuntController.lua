@@ -12,7 +12,8 @@ local REBUILD_DELAY = 0.3 -- QUEST_LOG_UPDATE fires in bursts; coalesce them
 local events = CreateFrame("Frame")
 local pendingRebuild = false -- a rebuild is waiting for combat to end
 local rebuildScheduled = false
-local model = { quests = {}, activeQuests = 0 } -- last view model for menu/tooltip
+local model = { quests = {}, activeQuests = 0, ordered = {} } -- last view model
+local views = {} -- extra views refreshed after every rebuild (e.g. the hunt list window)
 
 -- The options accept a spell name or a spell ID, but macro /cast only
 -- understands names, so turn an ID into the spell's name.
@@ -43,28 +44,58 @@ local function AllMobNames(quest)
     return names
 end
 
--- Checked mob names in menu order (quests by level, then objective order).
-local function CollectCheckedNames(quests)
-    local names = {}
+-- Lookup of mobs that are still huntable: active[questId][name] = true.
+local function ActiveMobs(quests)
+    local active = {}
     for _, quest in ipairs(quests) do
+        local set = {}
         for _, name in ipairs(AllMobNames(quest)) do
-            if SQG.HuntSelection:IsIncluded(quest.id, name) then
-                names[#names + 1] = name
-            end
+            set[name] = true
+        end
+        active[quest.id] = set
+    end
+    return active
+end
+
+-- Checked entries that are still huntable, in priority order.
+local function ActiveEntries(active, questieReady)
+    local entries = {}
+    for storeIndex, entry in ipairs(SQG.HuntSelection:GetOrdered()) do
+        local isActive = active[entry.questId] and active[entry.questId][entry.name]
+        if isActive or not questieReady then
+            entries[#entries + 1] = { storeIndex = storeIndex, questId = entry.questId, name = entry.name }
         end
     end
-    return names
+    return entries
 end
 
 --- View model for the menu and tooltip. Each mob gets a state:
 --- "used" (in the macro), "overflow" (checked, but the chain is full) or "off".
-local function BuildModel(quests, checkedNames, used)
-    local inMacro = {}
-    for i = 1, used do
-        inMacro[checkedNames[i]] = true
+local function BuildModel(quests, entries, used)
+    local inMacro, seen, counted = {}, {}, 0
+    for _, entry in ipairs(entries) do
+        if not seen[entry.name] then
+            seen[entry.name] = true
+            counted = counted + 1
+            inMacro[entry.name] = counted <= used
+        end
     end
 
-    local result = { quests = {}, activeQuests = 0 }
+    local titles = {}
+    for _, quest in ipairs(quests) do
+        titles[quest.id] = quest.title
+    end
+
+    local result = { quests = {}, activeQuests = 0, ordered = {} }
+    for position, entry in ipairs(entries) do
+        result.ordered[position] = {
+            storeIndex = entry.storeIndex,
+            questId = entry.questId,
+            name = entry.name,
+            questTitle = titles[entry.questId] or SQG.QuestProvider:GetQuestTitle(entry.questId) or "",
+            state = inMacro[entry.name] and "used" or "overflow",
+        }
+    end
     for _, quest in ipairs(quests) do
         local allNames = AllMobNames(quest)
         local entry = {
@@ -102,25 +133,39 @@ function HuntController:Rebuild()
     pendingRebuild = false
 
     local provider = SQG.QuestProvider
-    SQG.HuntSelection:MigrateLegacy(function(questId) return provider:GetMobNames(questId) end)
-    -- Forget checked mobs of quests that left the log (no-op until Questie is ready).
-    SQG.HuntSelection:Prune(function(questId) return provider:IsInLog(questId) end)
-
     local quests = provider:GetHuntableQuests()
-    local checkedNames = CollectCheckedNames(quests)
+    local questieReady = provider:IsReady()
+    local active = ActiveMobs(quests)
+
+    SQG.HuntSelection:MigrateLegacy(quests)
+    if questieReady then
+        -- Drop checked mobs whose quest left the log or objective is done.
+        SQG.HuntSelection:Prune(function(questId, name)
+            return (active[questId] and active[questId][name]) == true
+        end)
+    end
+
+    local entries = ActiveEntries(active, questieReady)
+    local orderedNames = {}
+    for _, entry in ipairs(entries) do
+        orderedNames[#orderedNames + 1] = entry.name
+    end
 
     local settings = SQG.db.hunt
-    local macros, used = SQG.HuntMacroBuilder.Build(checkedNames, {
+    local macros, used = SQG.HuntMacroBuilder.Build(orderedNames, {
         spell = ResolveSpellName(settings.spell),
         autoAttack = settings.autoAttack,
         chainNames = SQG.HuntButton:GetChainNames(),
     })
-    if used < #checkedNames then
-        SQG:Debug("Macro chain full: using %d of %d mob names", used, #checkedNames)
+    if used < #orderedNames then
+        SQG:Debug("Macro chain full: using %d of %d mob names", used, #orderedNames)
     end
 
-    model = BuildModel(quests, checkedNames, used)
+    model = BuildModel(quests, entries, used)
     SQG.HuntButton:SetHunt(macros, model)
+    for _, view in ipairs(views) do
+        view:Refresh(model)
+    end
     for index, text in ipairs(macros) do
         SQG:Debug("Hunt macro %d/%d:\n%s", index, #macros, text)
     end
@@ -165,6 +210,21 @@ function HuntController:ToggleQuest(questId)
     AfterSelectionChange()
 end
 
+function HuntController:MoveMob(fromStoreIndex, toStoreIndex)
+    SQG.HuntSelection:Move(fromStoreIndex, toStoreIndex)
+    AfterSelectionChange()
+end
+
+function HuntController:RemoveMob(storeIndex)
+    SQG.HuntSelection:RemoveAt(storeIndex)
+    AfterSelectionChange()
+end
+
+--- Registers a view with a :Refresh(model) method.
+function HuntController:AddView(view)
+    views[#views + 1] = view
+end
+
 function HuntController:ClearAll()
     SQG.HuntSelection:ClearAll()
     AfterSelectionChange()
@@ -203,7 +263,15 @@ function HuntController:Start()
         onMobToggled = function(questId, name) HuntController:ToggleMob(questId, name) end,
         onQuestToggled = function(questId) HuntController:ToggleQuest(questId) end,
         onClearAll = function() HuntController:ClearAll() end,
+        onEditOrder = function() SQG.HuntListWindow:Toggle() end,
     })
+
+    SQG.HuntListWindow:Create({
+        getModel = function() return HuntController:GetModel() end,
+        onMove = function(from, to) HuntController:MoveMob(from, to) end,
+        onRemove = function(index) HuntController:RemoveMob(index) end,
+    })
+    self:AddView(SQG.HuntListWindow)
 
     SQG:OnSettingsChanged(function()
         if not SQG.HuntButton:ApplySettings() then

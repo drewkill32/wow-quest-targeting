@@ -18,7 +18,7 @@ local DEFAULTS = {
 
 local CHAR_DEFAULTS = {
     huntPosition = nil,
-    huntIncluded = {},
+    huntOrder = {},
 }
 
 -- Keybinding labels (Options -> Keybindings).

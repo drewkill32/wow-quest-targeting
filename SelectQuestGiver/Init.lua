@@ -68,6 +68,10 @@ function commands.hunt()
         InCombatLockdown() and " (after combat)" or "")
 end
 
+function commands.list()
+    SQG.HuntListWindow:Toggle()
+end
+
 function commands.options()
     SQG.OptionsPanel:Open()
 end
@@ -80,6 +84,7 @@ end
 function commands.help()
     SQG:Print("Ctrl+click a Questie minimap pin to target that NPC.")
     SQG:Print("/sqg options - settings   /sqg hunt - show/hide hunt button")
+    SQG:Print("/sqg list - hunt priority order")
     SQG:Print("/sqg toggle - minimap Ctrl+click on/off   /sqg debug - debug output")
 end
 

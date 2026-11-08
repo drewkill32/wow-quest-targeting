@@ -202,8 +202,9 @@ local function BuildPanel()
     -- Hunt button -----------------------------------------------------------
     local huntHeader = Header(panel, "Quest hunt button", hint)
     local huntNote = Note(panel,
-        "Right-click the button to choose a quest. Each click (or keybind press) targets the nearest " ..
-        "living mob you still need for that quest, then attacks it. Settings changed in combat apply when combat ends.",
+        "Right-click the button to check the mobs to hunt (from any quests). Each click (or keybind press) " ..
+        "targets the first nearby mob in priority order, then attacks it. Change the order with " ..
+        "\"Edit priority order...\" in that menu or /sqg list. Changes made in combat apply when combat ends.",
         huntHeader)
     local show = Checkbox(panel, "Show hunt button", nil, huntNote,
         function() return db.hunt.show end, function(v) db.hunt.show = v end)

@@ -84,6 +84,7 @@ local function OpenModern(owner, model, callbacks)
         end
 
         root:CreateDivider()
+        root:CreateButton("Edit priority order...", callbacks.onEditOrder)
         KeepOpen(root:CreateCheckbox("Start auto-attack", IsAutoAttackOn, ToggleAutoAttack))
         root:CreateButton("Uncheck all", callbacks.onClearAll)
     end)
@@ -133,8 +134,11 @@ local function OpenClassic(owner, model, callbacks)
                 end
             end
         end
-        AddCheckbox("Start auto-attack", IsAutoAttackOn, ToggleAutoAttack)
         local info = UIDropDownMenu_CreateInfo()
+        info.text, info.notCheckable, info.func = "Edit priority order...", true, callbacks.onEditOrder
+        UIDropDownMenu_AddButton(info)
+        AddCheckbox("Start auto-attack", IsAutoAttackOn, ToggleAutoAttack)
+        info = UIDropDownMenu_CreateInfo()
         info.text, info.notCheckable, info.func = "Uncheck all", true, callbacks.onClearAll
         UIDropDownMenu_AddButton(info)
     end, "MENU")
@@ -142,7 +146,7 @@ local function OpenClassic(owner, model, callbacks)
 end
 
 --- Opens the menu next to `owner`.
----@param callbacks { getModel: fun(), onQuestToggled: fun(questId), onMobToggled: fun(questId, name), onClearAll: fun() }
+---@param callbacks { getModel: fun(), onQuestToggled: fun(questId), onMobToggled: fun(questId, name), onClearAll: fun(), onEditOrder: fun() }
 function HuntMenu:Open(owner, callbacks)
     local model = callbacks.getModel()
     if MenuUtil and MenuUtil.CreateContextMenu then
