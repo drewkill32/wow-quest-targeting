@@ -160,7 +160,7 @@ local function CreateRow(index)
         GameTooltip:AddLine(entry.name)
         GameTooltip:AddLine(entry.questTitle, 1, 0.82, 0)
         if entry.state == "overflow" then
-            GameTooltip:AddLine("Not in the macro: the chain is full.", 1, 0.53, 0, true)
+            GameTooltip:AddLine("Not in the macro: it is full (255 characters). Move this mob up to include it.", 1, 0.53, 0, true)
         end
         GameTooltip:AddLine("Drag to reorder. Higher rows are targeted first.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()

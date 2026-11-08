@@ -7,15 +7,10 @@ local HuntButton = {}
 SQG.HuntButton = HuntButton
 
 local BUTTON_NAME = "SelectQuestGiverHuntButton"
--- Hidden buttons the main macro hands off to with /click when it's too long
--- for one macro (255 chars). Each adds room for roughly 6-8 more mob names.
-local CHAIN_PREFIX = "SelectQuestGiverHuntChain"
-local CHAIN_COUNT = 4
 local DEFAULT_ICON = "Interface\\Icons\\Ability_Hunter_SniperShot"
 local SIZE = 40
 
 local button, icon, label
-local chainButtons, chainNames = {}, {}
 local callbacks = {} -- from the controller; see HuntMenu:Open
 local model = { quests = {}, activeQuests = 0 } -- view model from HuntController
 
@@ -64,7 +59,7 @@ local function ShowTooltip(self)
                     if mob.state == "used" then
                         GameTooltip:AddLine("  " .. mob.name, 1, 1, 1)
                     elseif mob.state == "overflow" then
-                        GameTooltip:AddLine("  " .. mob.name .. " (chain full)", 1, 0.53, 0)
+                        GameTooltip:AddLine("  " .. mob.name .. " (macro full)", 1, 0.53, 0)
                     end
                 end
             end
@@ -111,23 +106,6 @@ local function OnDragStop(self)
     SavePosition()
 end
 
--- An invisible secure button run by "/click <name>" from the previous macro.
--- A bare /click hands it a release, so it must act on release regardless of
--- the "cast on key down" setting (useOnKeyDown = false).
-local function CreateChainButton(index)
-    local name = CHAIN_PREFIX .. index
-    local chain = CreateFrame("Button", name, UIParent, "SecureActionButtonTemplate")
-    chain:SetSize(1, 1)
-    chain:SetPoint("CENTER")
-    chain:SetAlpha(0)
-    chain:EnableMouse(false)
-    chain:RegisterForClicks("AnyUp", "AnyDown")
-    chain:SetAttribute("useOnKeyDown", false)
-    chain:SetAttribute("*type1", "macro")
-    chain:Show()
-    return chain, name
-end
-
 ---------------------------------------------------------------------------
 -- Public API
 ---------------------------------------------------------------------------
@@ -166,10 +144,6 @@ function HuntButton:Create(controllerCallbacks)
     button:SetScript("OnDragStart", OnDragStart)
     button:SetScript("OnDragStop", OnDragStop)
 
-    for index = 1, CHAIN_COUNT do
-        chainButtons[index], chainNames[index] = CreateChainButton(index)
-    end
-
     RestorePosition()
     self:ApplySettings()
 end
@@ -186,21 +160,12 @@ function HuntButton:ApplySettings()
     return true
 end
 
---- Global names of the hidden chain buttons, in order.
-function HuntButton:GetChainNames()
-    return chainNames
-end
-
---- Sets the macro chain and the view model. Out of combat only.
---- macros[1] runs on the main button, macros[i + 1] on chain button i.
-function HuntButton:SetHunt(macros, viewModel)
+--- Sets the macro and the view model. Out of combat only.
+function HuntButton:SetHunt(macrotext, viewModel)
     if InCombatLockdown() then
         return false
     end
-    button:SetAttribute("*macrotext1", macros[1])
-    for index, chain in ipairs(chainButtons) do
-        chain:SetAttribute("*macrotext1", macros[index + 1])
-    end
+    button:SetAttribute("*macrotext1", macrotext)
     model = viewModel
     label:SetText(SummaryText())
     if GameTooltip:GetOwner() == button then

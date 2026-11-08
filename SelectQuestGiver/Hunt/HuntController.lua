@@ -1,4 +1,4 @@
--- Keeps the hunt button's macro chain in sync with the mobs the player has
+-- Keeps the hunt button's macro in sync with the mobs the player has
 -- checked (across any number of quests) and with the quest log.
 -- Secure attributes can't change in combat, so changes made in combat are
 -- queued and applied as soon as combat ends.
@@ -70,7 +70,7 @@ local function ActiveEntries(active, questieReady)
 end
 
 --- View model for the menu and tooltip. Each mob gets a state:
---- "used" (in the macro), "overflow" (checked, but the chain is full) or "off".
+--- "used" (in the macro), "overflow" (checked, but the 255-char macro is full) or "off".
 local function BuildModel(quests, entries, used)
     local inMacro, seen, counted = {}, {}, 0
     for _, entry in ipairs(entries) do
@@ -152,23 +152,20 @@ function HuntController:Rebuild()
     end
 
     local settings = SQG.db.hunt
-    local macros, used = SQG.HuntMacroBuilder.Build(orderedNames, {
+    local macrotext, used = SQG.HuntMacroBuilder.Build(orderedNames, {
         spell = ResolveSpellName(settings.spell),
         autoAttack = settings.autoAttack,
-        chainNames = SQG.HuntButton:GetChainNames(),
     })
     if used < #orderedNames then
-        SQG:Debug("Macro chain full: using %d of %d mob names", used, #orderedNames)
+        SQG:Debug("Macro full: using %d of %d mob names", used, #orderedNames)
     end
 
     model = BuildModel(quests, entries, used)
-    SQG.HuntButton:SetHunt(macros, model)
+    SQG.HuntButton:SetHunt(macrotext, model)
     for _, view in ipairs(views) do
         view:Refresh(model)
     end
-    for index, text in ipairs(macros) do
-        SQG:Debug("Hunt macro %d/%d:\n%s", index, #macros, text)
-    end
+    SQG:Debug("Hunt macro (%d chars):\n%s", #macrotext, macrotext)
 end
 
 function HuntController:ScheduleRebuild()
@@ -192,6 +189,14 @@ end
 
 function HuntController:ToggleMob(questId, name)
     SQG.HuntSelection:ToggleMob(questId, name)
+    AfterSelectionChange()
+end
+
+--- Checks or unchecks several mobs of one quest with a single rebuild.
+function HuntController:SetMobs(questId, names, include)
+    for _, name in ipairs(names) do
+        SQG.HuntSelection:SetIncluded(questId, name, include)
+    end
     AfterSelectionChange()
 end
 
@@ -264,7 +269,15 @@ function HuntController:Start()
         onQuestToggled = function(questId) HuntController:ToggleQuest(questId) end,
         onClearAll = function() HuntController:ClearAll() end,
         onEditOrder = function() SQG.HuntListWindow:Toggle() end,
+        onPickMobs = function(questId) SQG.HuntMobPicker:Open(questId) end,
     })
+
+    SQG.HuntMobPicker:Create({
+        getModel = function() return HuntController:GetModel() end,
+        onMobToggled = function(questId, name) HuntController:ToggleMob(questId, name) end,
+        onSetMobs = function(questId, names, include) HuntController:SetMobs(questId, names, include) end,
+    })
+    self:AddView(SQG.HuntMobPicker)
 
     SQG.HuntListWindow:Create({
         getModel = function() return HuntController:GetModel() end,

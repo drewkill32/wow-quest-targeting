@@ -24,6 +24,7 @@ Hunt/HuntSelection.lua
 Hunt/HuntMenu.lua
 Hunt/HuntButton.lua
 Hunt/HuntListWindow.lua
+Hunt/HuntMobPicker.lua
 Hunt/HuntController.lua
 
 Options/OptionsPanel.lua

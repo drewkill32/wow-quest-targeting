@@ -10,35 +10,45 @@ local function check(name, cond)
     if not cond then failures = failures + 1 end
 end
 
-local CHAIN = { "Chain1", "Chain2", "Chain3" }
+local CAST = "/cast [harm,nodead] Judgement"
+local ATTACK = "/startattack [harm,nodead]"
+local FULL = { spell = "Judgement", autoAttack = true }
 
-local function ManyNames(n)
-    local names = {}
-    for i = 1, n do
-        names[i] = "Some Fairly Long Mob Name " .. i
-    end
-    return names
+local function EndsWith(text, suffix)
+    return text:sub(-#suffix) == suffix
+end
+
+local function Count(text, pattern)
+    local n = 0
+    for _ in text:gmatch(pattern) do n = n + 1 end
+    return n
 end
 
 do
-    local macros, used = Build({}, {})
-    check("no names -> only cleartarget", #macros == 1 and macros[1] == "/cleartarget [dead]" and used == 0)
+    -- Conditions are only dropped when that fits more names.
+    local text = Build({ "A", "B" }, FULL)
+    check("short list keeps [harm,nodead]", EndsWith(text, ATTACK .. "\n" .. CAST))
 end
 
 do
-    local macros = Build({ "Grizzly Bear" }, { spell = "Judgement", autoAttack = true, chainNames = CHAIN })
-    check("short macro stays on one button", #macros == 1 and macros[1] == table.concat({
+    local text, used = Build({}, {})
+    check("no names -> only cleartarget", text == "/cleartarget [dead]" and used == 0)
+end
+
+do
+    local text, used, exact = Build({ "Grizzly Bear" }, FULL)
+    check("room to spare -> exact form", text == table.concat({
         "/cleartarget [dead]",
         "/targetexact [noexists] Grizzly Bear",
-        "/startattack [harm,nodead]",
-        "/cast [harm,nodead] Judgement",
-    }, "\n"))
+        ATTACK,
+        CAST,
+    }, "\n") and used == 1 and exact[1] == true)
 end
 
 do
-    local macros = Build({ "Grizzly Bear" }, { spell = "  ", autoAttack = false })
+    local text = Build({ "Grizzly Bear" }, { spell = "  ", autoAttack = false })
     check("blank spell + no autoattack -> target only",
-        macros[1] == "/cleartarget [dead]\n/targetexact [noexists] Grizzly Bear")
+        text == "/cleartarget [dead]\n/targetexact [noexists] Grizzly Bear")
 end
 
 do
@@ -46,43 +56,51 @@ do
     check("dedupes and trims names", used == 2)
 end
 
-do
-    local macros, used = Build(ManyNames(40), { spell = "Judgement", autoAttack = true })
-    check("no chain: one macro within cap", #macros == 1 and #macros[1] <= Builder.MAX_LENGTH)
-    check("no chain: keeps first names", used > 0 and used < 40 and macros[1]:find("Name 1\n", 1, true) ~= nil)
-    check("no chain: tail kept", macros[1]:sub(-#"/cast [harm,nodead] Judgement") == "/cast [harm,nodead] Judgement")
-end
+-- The real list from the hunt priority window.
+local REAL = {
+    "Krethis Shadowspinner", "Moss Stalker", "Mist Creeper", "Searing Blade Cultist",
+    "Searing Blade Enforcer", "Nightlash", "Moonrage Darkrunner",
+}
 
 do
-    local macros, used = Build(ManyNames(12), { spell = "Judgement", autoAttack = true, chainNames = CHAIN })
-    check("chain: all 12 names fit", used == 12)
-    check("chain: uses more than one macro", #macros > 1 and #macros <= 1 + #CHAIN)
-    local allOk = true
-    for i, text in ipairs(macros) do
-        if #text > Builder.MAX_LENGTH then allOk = false end
-        local expectedClick = CHAIN[i]
-        local endsWithClick = expectedClick and text:sub(-#("/click " .. expectedClick)) == "/click " .. expectedClick
-        if i < #macros and not endsWithClick then allOk = false end
-        if i == #macros and text:find("/click", 1, true) then allOk = false end
+    local text, used, exact = Build(REAL, FULL)
+    print(("  real list: %d/%d names, %d chars\n%s"):format(used, #REAL, #text, text))
+    check("real list: within 255", #text <= Builder.MAX_LENGTH)
+    check("real list: more names than all-exact would fit", used >= 5)
+    check("real list: compact tail used to fit more", EndsWith(text, "/startattack\n/cast Judgement"))
+    check("real list: no /click", not text:find("/click", 1, true))
+    -- Exact upgrades go to the top of the list first.
+    local sawShort, ordered = false, true
+    for i = 1, used do
+        if exact[i] == false then sawShort = true elseif sawShort then ordered = false end
     end
-    check("chain: each macro within cap, linked by /click in order", allOk)
-    check("chain: cleartarget first", macros[1]:sub(1, #"/cleartarget [dead]") == "/cleartarget [dead]")
-    local joined = table.concat(macros, "\n")
-    local lastTarget = joined:find("Name 12\n", 1, true)
-    local attackAt = joined:find("/startattack [harm,nodead]", 1, true)
-    local castAt = joined:find("/cast [harm,nodead] Judgement", 1, true)
-    check("chain: attack then cast, after every target line",
-        lastTarget and attackAt and castAt and lastTarget < attackAt and attackAt < castAt)
-    check("chain: cast is the very last line", macros[#macros]:sub(-#"/cast [harm,nodead] Judgement") == "/cast [harm,nodead] Judgement")
-    check("chain: names in order", joined:find("Name 1\n", 1, true) < joined:find("Name 12\n", 1, true))
+    check("real list: exact lines come first (priority order)", ordered)
+    check("real list: line kinds match flags",
+        Count(text, "/targetexact ") + Count(text, "/tar %[") == used)
 end
 
 do
-    local macros, used = Build(ManyNames(200), { spell = "Judgement", autoAttack = true, chainNames = CHAIN })
-    check("chain full: drops overflow names", used > 0 and used < 200)
-    check("chain full: never more macros than buttons", #macros <= 1 + #CHAIN)
-    check("chain full: tail still last",
-        macros[#macros]:sub(-#"/cast [harm,nodead] Judgement") == "/cast [harm,nodead] Judgement")
+    local names = {}
+    for i = 1, 40 do names[i] = "Some Fairly Long Mob Name " .. i end
+    local text, used = Build(names, FULL)
+    check("long list: within 255", #text <= Builder.MAX_LENGTH)
+    check("long list: keeps the first names in order",
+        used > 0 and used < 40 and text:find("Name 1\n", 1, true) ~= nil and not text:find("Name " .. (used + 1) .. "\n", 1, true))
+    check("long list: cast still last", EndsWith(text, "Judgement"))
+end
+
+do
+    -- Every size 1..30 stays within the cap and keeps the tail.
+    local ok = true
+    for n = 1, 30 do
+        local names = {}
+        for i = 1, n do names[i] = "Mob Number " .. i end
+        local text, used = Build(names, FULL)
+        if #text > Builder.MAX_LENGTH or not EndsWith(text, "Judgement") or used > n then ok = false end
+        local _, usedWithoutTail = Build(names, {})
+        if usedWithoutTail < used then ok = false end
+    end
+    check("sweep 1..30: within cap, tail kept", ok)
 end
 
 if failures > 0 then
