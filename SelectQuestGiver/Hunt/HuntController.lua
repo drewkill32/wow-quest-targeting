@@ -44,15 +44,18 @@ local function AllMobNames(quest)
     return names
 end
 
--- Lookup of mobs that are still huntable: active[questId][name] = true.
+-- Lookup of targets that are still needed and their kind:
+-- active[questId][name] = "kill" | "talk" | "turnin".
 local function ActiveMobs(quests)
     local active = {}
     for _, quest in ipairs(quests) do
-        local set = {}
-        for _, name in ipairs(AllMobNames(quest)) do
-            set[name] = true
+        local kinds = {}
+        for _, group in ipairs(quest.groups) do
+            for _, name in ipairs(group.mobNames) do
+                kinds[name] = kinds[name] or group.kind
+            end
         end
-        active[quest.id] = set
+        active[quest.id] = kinds
     end
     return active
 end
@@ -61,9 +64,14 @@ end
 local function ActiveEntries(active, questieReady)
     local entries = {}
     for storeIndex, entry in ipairs(SQG.HuntSelection:GetOrdered()) do
-        local isActive = active[entry.questId] and active[entry.questId][entry.name]
-        if isActive or not questieReady then
-            entries[#entries + 1] = { storeIndex = storeIndex, questId = entry.questId, name = entry.name }
+        local kind = active[entry.questId] and active[entry.questId][entry.name]
+        if kind or not questieReady then
+            entries[#entries + 1] = {
+                storeIndex = storeIndex,
+                questId = entry.questId,
+                name = entry.name,
+                kind = kind or "kill",
+            }
         end
     end
     return entries
@@ -86,15 +94,26 @@ local function BuildModel(quests, entries, used)
         titles[quest.id] = quest.title
     end
 
-    local result = { quests = {}, activeQuests = 0, ordered = {} }
+    -- mobStates[questId][name] = "used" | "overflow" for checked mobs, so views
+    -- can look up a mob's live state without walking the quest tree.
+    local result = { quests = {}, activeQuests = 0, ordered = {}, mobStates = {}, usedCount = 0, overflowCount = 0 }
     for position, entry in ipairs(entries) do
+        local state = inMacro[entry.name] and "used" or "overflow"
         result.ordered[position] = {
             storeIndex = entry.storeIndex,
             questId = entry.questId,
             name = entry.name,
             questTitle = titles[entry.questId] or SQG.QuestProvider:GetQuestTitle(entry.questId) or "",
-            state = inMacro[entry.name] and "used" or "overflow",
+            state = state,
+            kind = entry.kind,
         }
+        result.mobStates[entry.questId] = result.mobStates[entry.questId] or {}
+        result.mobStates[entry.questId][entry.name] = state
+        if state == "used" then
+            result.usedCount = result.usedCount + 1
+        else
+            result.overflowCount = result.overflowCount + 1
+        end
     end
     for _, quest in ipairs(quests) do
         local allNames = AllMobNames(quest)
@@ -113,16 +132,41 @@ local function BuildModel(quests, entries, used)
                 if included then
                     state = inMacro[name] and "used" or "overflow"
                 end
-                mobs[#mobs + 1] = { name = name, included = included, state = state }
+                mobs[#mobs + 1] = { name = name, included = included, state = state, kind = group.kind }
             end
-            entry.groups[#entry.groups + 1] = { label = group.label, mobs = mobs }
+            entry.groups[#entry.groups + 1] = { label = group.label, kind = group.kind, mobs = mobs }
         end
         if entry.state ~= "none" then
             result.activeQuests = result.activeQuests + 1
         end
         result.quests[#result.quests + 1] = entry
     end
+    -- The top-priority target decides the button's icon.
+    result.topKind = entries[1] and entries[1].kind or nil
     return result
+end
+
+-- Talk / turn-in NPCs are only targeted: with no mobs listed the macro just
+-- targets; with mobs too, attack and cast keep their [harm] guards so a
+-- friendly NPC is never attacked.
+local function MacroOptions(entries)
+    local hasMob, hasNpc = false, false
+    for _, entry in ipairs(entries) do
+        if entry.kind == "kill" then
+            hasMob = true
+        else
+            hasNpc = true
+        end
+    end
+    if hasNpc and not hasMob then
+        return { retarget = true }
+    end
+    local settings = SQG.db.hunt
+    return {
+        spell = ResolveSpellName(SQG:GetHuntSpell()),
+        autoAttack = settings.autoAttack,
+        keepConditions = hasNpc,
+    }
 end
 
 function HuntController:Rebuild()
@@ -141,7 +185,7 @@ function HuntController:Rebuild()
     if questieReady then
         -- Drop checked mobs whose quest left the log or objective is done.
         SQG.HuntSelection:Prune(function(questId, name)
-            return (active[questId] and active[questId][name]) == true
+            return (active[questId] and active[questId][name]) ~= nil
         end)
     end
 
@@ -151,16 +195,17 @@ function HuntController:Rebuild()
         orderedNames[#orderedNames + 1] = entry.name
     end
 
-    local settings = SQG.db.hunt
-    local macrotext, used = SQG.HuntMacroBuilder.Build(orderedNames, {
-        spell = ResolveSpellName(settings.spell),
-        autoAttack = settings.autoAttack,
-    })
+    local macrotext, used = SQG.HuntMacroBuilder.Build(orderedNames, MacroOptions(entries))
     if used < #orderedNames then
         SQG:Debug("Macro full: using %d of %d mob names", used, #orderedNames)
     end
 
+    -- A hand-edited macro (options page) replaces the generated one; the
+    -- generated text is still kept in the model so the editor can show it.
+    local custom = SQG.charDb.customMacro
     model = BuildModel(quests, entries, used)
+    model.macro = { generated = macrotext, custom = custom, active = custom or macrotext }
+    macrotext = model.macro.active
     SQG.HuntButton:SetHunt(macrotext, model)
     for _, view in ipairs(views) do
         view:Refresh(model)
@@ -230,6 +275,15 @@ function HuntController:AddView(view)
     views[#views + 1] = view
 end
 
+--- Saves a hand-edited macro (nil or blank goes back to the generated one).
+function HuntController:SetCustomMacro(text)
+    if text and strtrim(text) == "" then
+        text = nil
+    end
+    SQG.charDb.customMacro = text
+    AfterSelectionChange()
+end
+
 function HuntController:ClearAll()
     SQG.HuntSelection:ClearAll()
     AfterSelectionChange()
@@ -239,6 +293,12 @@ end
 --- rebuild applies immediately).
 function HuntController:GetModel()
     self:Rebuild()
+    return model
+end
+
+--- The last built model, without rebuilding. Selection changes rebuild
+--- synchronously (out of combat), so an open menu can read live states here.
+function HuntController:CurrentModel()
     return model
 end
 
@@ -265,12 +325,21 @@ function HuntController:Start()
 
     SQG.HuntButton:Create({
         getModel = function() return HuntController:GetModel() end,
+        getCurrentModel = function() return HuntController:CurrentModel() end,
         onMobToggled = function(questId, name) HuntController:ToggleMob(questId, name) end,
         onQuestToggled = function(questId) HuntController:ToggleQuest(questId) end,
         onClearAll = function() HuntController:ClearAll() end,
         onEditOrder = function() SQG.HuntListWindow:Toggle() end,
         onPickMobs = function(questId) SQG.HuntMobPicker:Open(questId) end,
+        onOpenOptions = function() SQG.OptionsPanel:Open() end,
     })
+
+    SQG.MacroEditor:Bind({
+        getCurrentModel = function() return HuntController:CurrentModel() end,
+        onSave = function(text) HuntController:SetCustomMacro(text) end,
+        onReset = function() HuntController:SetCustomMacro(nil) end,
+    })
+    self:AddView(SQG.MacroEditor)
 
     SQG.HuntMobPicker:Create({
         getModel = function() return HuntController:GetModel() end,

@@ -43,7 +43,7 @@ local function VisibleItems()
             end
         end
         if #mobs > 0 then
-            items[#items + 1] = { header = group.label }
+            items[#items + 1] = { header = SQG.HuntStyle.KindIcon(group.kind) .. group.label }
             for _, mob in ipairs(mobs) do
                 items[#items + 1] = { mob = mob }
             end
@@ -52,17 +52,34 @@ local function VisibleItems()
     return items
 end
 
-local function CheckedCount()
-    local checked, total = 0, 0
+-- Returns checked, total and how many checked mobs didn't fit in the macro.
+local function Counts()
+    local checked, total, overflow = 0, 0, 0
     for _, group in ipairs(quest and quest.groups or {}) do
         for _, mob in ipairs(group.mobs) do
             total = total + 1
             if SQG.HuntSelection:IsIncluded(questId, mob.name) then
                 checked = checked + 1
             end
+            if mob.state == "overflow" then
+                overflow = overflow + 1
+            end
         end
     end
-    return checked, total
+    return checked, total, overflow
+end
+
+local function CountLabel()
+    local checked, total, overflow = Counts()
+    local text = string.format("%d of %d checked", checked, total)
+    if overflow > 0 then
+        text = string.format("%s   %s %d don't fit", text, SQG.HuntStyle.OverflowIcon(), overflow)
+    end
+    return text
+end
+
+local function MobLabel(mob)
+    return SQG.HuntStyle.MobText(mob.name, mob.state == "overflow", mob.kind)
 end
 
 ---------------------------------------------------------------------------
@@ -109,7 +126,7 @@ local function Render()
             row.header:Hide()
             row.check:Show()
             row.check:SetChecked(SQG.HuntSelection:IsIncluded(questId, mob.name))
-            row.name:SetText(mob.name .. (mob.state == "overflow" and " |cffff8800(macro full)|r" or ""))
+            row.name:SetText(MobLabel(mob))
             row.name:Show()
         end
         row:Show()
@@ -120,8 +137,7 @@ local function Render()
     content:SetHeight(math.max(1, #items * ROW_HEIGHT))
     emptyText:SetShown(#items == 0)
 
-    local checked, total = CheckedCount()
-    countText:SetText(string.format("%d of %d checked", checked, total))
+    countText:SetText(CountLabel())
 end
 
 ---------------------------------------------------------------------------

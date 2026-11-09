@@ -103,6 +103,27 @@ do
     check("sweep 1..30: within cap, tail kept", ok)
 end
 
+do
+    -- Friendly NPCs mixed in: conditions stay even when dropping them fits more.
+    local text = Build(REAL, { spell = "Judgement", autoAttack = true, keepConditions = true })
+    check("keepConditions: guarded tail kept", EndsWith(text, ATTACK .. "\n" .. CAST))
+    check("keepConditions: within 255", #text <= Builder.MAX_LENGTH)
+end
+
+do
+    -- Only NPCs: no clear, plain target lines, lowest priority first.
+    local text = Build({ "Innkeeper Farley", "Marshal Dughan" }, { retarget = true, spell = "Judgement", autoAttack = true })
+    check("retarget: no clear, reversed plain targets, no attack", text == table.concat({
+        "/targetexact Marshal Dughan",
+        "/targetexact Innkeeper Farley",
+    }, "\n"))
+    local names = {}
+    for i = 1, 30 do names[i] = "Some Long Friendly Npc Name " .. i end
+    local long, used = Build(names, { retarget = true })
+    check("retarget: long list within 255, top priority last", #long <= Builder.MAX_LENGTH
+        and used > 0 and EndsWith(long, "Name 1"))
+end
+
 if failures > 0 then
     print(failures .. " test(s) failed")
     os.exit(1)

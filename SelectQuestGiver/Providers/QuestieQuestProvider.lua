@@ -1,10 +1,13 @@
--- Adapter that reads Questie's quest data to find the hostile mobs still
--- needed for quests in the player's log.
+-- Adapter that reads Questie's quest data to find what the player still has
+-- to target for quests in their log: hostile mobs, NPCs to talk to and the
+-- NPCs completed quests are turned in to.
 --
 -- Sources (read-only):
 --   QuestLogCache.questLog_DO_NOT_MODIFY[questId] = { title, objectives[i].finished, ... }
 --   QuestieDB.GetQuest(questId).Objectives[i].spawnList[id] = { Name, Hostile, ... }
 --   QuestieDB.GetQuest(questId).ObjectiveData[i] = { Type, Id, IdList }  (fallback)
+--   QuestieDB.GetQuest(questId).Finisher.NPC = { npcId, ... }  (turn-in NPCs)
+--   QuestieDB.IsComplete(questId) == 1  (ready to turn in)
 local _, SQG = ...
 
 local QuestieQuestProvider = { name = "Questie" }
@@ -24,25 +27,61 @@ function QuestieQuestProvider:IsAvailable()
 end
 
 ---------------------------------------------------------------------------
--- Name collection
+-- Target kinds
+--   "kill"   hostile mob (or a mob dropping a quest item): target, attack, cast
+--   "talk"   friendly NPC an objective asks you to speak with: target only
+--   "turnin" NPC the completed quest is handed in to: target only
 ---------------------------------------------------------------------------
-local function AddName(names, seen, name)
-    if type(name) == "string" and name ~= "" and not seen[name] then
-        seen[name] = true
-        names[#names + 1] = name
+local KIND_ORDER = { turnin = 1, talk = 2, kill = 3 }
+
+-- Questie's IsFriendlyToPlayer treats "no faction data" as friendly, which
+-- would make every hostile mob a talk target, so read the raw field:
+-- friendlyToFaction is "A", "H", "AH" or nil (friendly to nobody).
+local function IsFriendlyNpc(QuestieDB, npcId)
+    local factions = QuestieDB.QueryNPCSingle(npcId, "friendlyToFaction")
+    if type(factions) ~= "string" then
+        return false
     end
+    local letter = UnitFactionGroup("player") == "Horde" and "H" or "A"
+    return factions:find(letter, 1, true) ~= nil
+end
+
+-- Collects target names for one objective into names[kind], skipping names
+-- already used by an earlier objective.
+local Collector = {}
+Collector.__index = Collector
+
+local function NewCollector(QuestieDB)
+    return setmetatable({ db = QuestieDB, seen = {}, names = { kill = {}, talk = {} } }, Collector)
+end
+
+function Collector:Add(kind, name)
+    if type(name) == "string" and name ~= "" and not self.seen[name] then
+        self.seen[name] = true
+        local list = self.names[kind]
+        list[#list + 1] = name
+    end
+end
+
+-- A monster objective is "talk" when the NPC is friendly to the player.
+function Collector:AddNpc(npcId, name, objectiveType)
+    local kind = "kill"
+    if objectiveType ~= "item" and npcId and IsFriendlyNpc(self.db, npcId) then
+        kind = "talk"
+    end
+    self:Add(kind, name or (npcId and self.db.QueryNPCSingle(npcId, "name")))
 end
 
 -- Preferred: Questie's resolved spawn list (already has the Hostile flag,
 -- and includes mobs that drop quest items).
-local function CollectFromSpawnList(objective, names, seen)
+function Collector:FromSpawnList(objective, objectiveType)
     local spawnList = objective and objective.spawnList
     if type(spawnList) ~= "table" or not next(spawnList) then
         return false
     end
-    for _, spawn in pairs(spawnList) do
+    for id, spawn in pairs(spawnList) do
         if spawn.Hostile then
-            AddName(names, seen, spawn.Name)
+            self:AddNpc(spawn.Id or id, spawn.Name, objectiveType)
         end
     end
     return true
@@ -50,28 +89,31 @@ end
 
 -- Fallback when Questie hasn't resolved the spawn list yet: look the
 -- monsters up straight from the database.
-local function CollectFromObjectiveData(QuestieDB, data, names, seen)
+function Collector:FromObjectiveData(data)
     if type(data) ~= "table" then
         return
     end
-    local function AddNpc(npcId)
-        AddName(names, seen, QuestieDB.QueryNPCSingle(npcId, "name"))
-    end
-
     if data.Type == "monster" then
-        AddNpc(data.Id)
+        self:AddNpc(data.Id, nil, data.Type)
     elseif data.Type == "killcredit" and data.IdList then
         for _, npcId in ipairs(data.IdList) do
-            AddNpc(npcId)
+            self:AddNpc(npcId, nil, data.Type)
         end
     elseif data.Type == "item" then
-        local item = QuestieDB:GetItem(data.Id)
+        local item = self.db:GetItem(data.Id)
         for _, source in pairs(item and item.Sources or {}) do
             if source.Type == "monster" and not source.Vendor then
-                AddNpc(source.Id)
+                self:AddNpc(source.Id, nil, "item")
             end
         end
     end
+end
+
+-- Takes the names gathered for one objective, leaving the collector empty.
+function Collector:Drain()
+    local names = self.names
+    self.names = { kill = {}, talk = {} }
+    return names
 end
 
 local function ObjectiveLabel(logObjective, index)
@@ -83,11 +125,25 @@ local function ObjectiveLabel(logObjective, index)
     return text
 end
 
---- Incomplete objectives of a quest with the hostile mobs for each:
---- { { label = "Grizzled Bear Heart", mobNames = { ... } }, ... }
---- A mob appears only under the first objective that needs it.
+-- NPCs the quest is turned in to (objects can't be targeted, so skipped).
+local function TurnInNames(QuestieDB, quest)
+    local names, seen = {}, {}
+    for _, npcId in ipairs(quest.Finisher and quest.Finisher.NPC or {}) do
+        local name = QuestieDB.QueryNPCSingle(npcId, "name")
+        if name and not seen[name] then
+            seen[name] = true
+            names[#names + 1] = name
+        end
+    end
+    return names
+end
+
+--- Targets for a quest, grouped by objective:
+--- { { label = "Grizzled Bear Heart", kind = "kill", mobNames = { ... } }, ... }
+--- A completed quest has a single "turnin" group with its finisher NPCs.
+--- A name appears only under the first objective that needs it.
 function QuestieQuestProvider:GetObjectiveGroups(questId)
-    local groups, seen = {}, {}
+    local groups = {}
     local QuestLogCache, QuestieDB = ImportModule("QuestLogCache"), ImportModule("QuestieDB")
     local logEntry = questId and QuestLogCache and QuestLogCache.questLog_DO_NOT_MODIFY[questId]
     local quest = logEntry and QuestieDB.GetQuest(questId)
@@ -95,18 +151,33 @@ function QuestieQuestProvider:GetObjectiveGroups(questId)
         return groups
     end
 
+    if QuestieDB.IsComplete(questId) == 1 then
+        local names = TurnInNames(QuestieDB, quest)
+        if #names > 0 then
+            groups[1] = { label = "Turn in to", kind = "turnin", mobNames = names }
+        end
+        return groups
+    end
+
+    local collector = NewCollector(QuestieDB)
     for index, logObjective in ipairs(logEntry.objectives or {}) do
         if not logObjective.finished then
-            local names = {}
             local objective = quest.Objectives and quest.Objectives[index]
-            if not CollectFromSpawnList(objective, names, seen) then
-                CollectFromObjectiveData(QuestieDB, quest.ObjectiveData and quest.ObjectiveData[index], names, seen)
+            local data = quest.ObjectiveData and quest.ObjectiveData[index]
+            local objectiveType = (data and data.Type) or logObjective.type
+            if not collector:FromSpawnList(objective, objectiveType) then
+                collector:FromObjectiveData(data)
             end
-            if #names > 0 then
-                groups[#groups + 1] = { label = ObjectiveLabel(logObjective, index), mobNames = names }
+            local names = collector:Drain()
+            local label = ObjectiveLabel(logObjective, index)
+            for _, kind in ipairs({ "talk", "kill" }) do
+                if #names[kind] > 0 then
+                    groups[#groups + 1] = { label = label, kind = kind, mobNames = names[kind] }
+                end
             end
         end
     end
+    table.sort(groups, function(a, b) return KIND_ORDER[a.kind] < KIND_ORDER[b.kind] end)
     return groups
 end
 
@@ -143,7 +214,8 @@ function QuestieQuestProvider:GetQuestTitle(questId)
     return entry and entry.title
 end
 
---- Quests in the log that still have hostile mobs to hunt, sorted by level:
+--- Quests in the log with something to target (mobs, talk or turn-in NPCs),
+--- sorted by level:
 --- { { id, title, level, groups = GetObjectiveGroups(id) }, ... }
 function QuestieQuestProvider:GetHuntableQuests()
     local quests = {}

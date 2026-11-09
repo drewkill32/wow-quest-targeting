@@ -160,7 +160,7 @@ local function CreateRow(index)
         GameTooltip:AddLine(entry.name)
         GameTooltip:AddLine(entry.questTitle, 1, 0.82, 0)
         if entry.state == "overflow" then
-            GameTooltip:AddLine("Not in the macro: it is full (255 characters). Move this mob up to include it.", 1, 0.53, 0, true)
+            GameTooltip:AddLine(SQG.HuntStyle.OverflowIcon() .. " Not in the macro: it is full (255 characters). Move this mob up to include it.", 1, 0.53, 0, true)
         end
         GameTooltip:AddLine("Drag to reorder. Higher rows are targeted first.", 0.6, 0.6, 0.6, true)
         GameTooltip:Show()
@@ -175,12 +175,11 @@ local function RenderRows()
         rows[position] = row
         row.position = position
         row.number:SetText(position .. ".")
-        row.name:SetText(entry.name)
-        if entry.state == "overflow" then
-            row.name:SetTextColor(1, 0.53, 0)
-        else
-            row.name:SetTextColor(1, 1, 1)
-        end
+        local overflowed = entry.state == "overflow"
+        row.name:SetText(SQG.HuntStyle.MobText(entry.name, overflowed, entry.kind))
+        row.name:SetTextColor(1, 1, 1)
+        row.number:SetAlpha(overflowed and 0.5 or 1)
+        row.quest:SetAlpha(overflowed and 0.5 or 1)
         row.quest:SetText(entry.questTitle)
         row.up:SetEnabled(position > 1)
         row.down:SetEnabled(position < #entries)

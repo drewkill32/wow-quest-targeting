@@ -78,7 +78,7 @@ end
 local function SpellBox(parent, anchor)
     local label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     label:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 4, -14)
-    label:SetText("Spell to cast on hostile targets (empty = just target):")
+    label:SetText("Spell to cast on hostile targets, for this character (empty = just target):")
 
     local box = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     box:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 4, -6)
@@ -90,7 +90,7 @@ local function SpellBox(parent, anchor)
 
     local function Save(self)
         local spell = strtrim(self:GetText() or "")
-        SQG.db.hunt.spell = spell
+        SQG:SetHuntSpell(spell)
         if spell == "" or IsKnownSpell(spell) then
             status:SetText("")
         else
@@ -100,7 +100,7 @@ local function SpellBox(parent, anchor)
     end
 
     box:SetScript("OnShow", function(self)
-        self:SetText(SQG.db.hunt.spell or "")
+        self:SetText(SQG:GetHuntSpell())
         status:SetText("")
     end)
     box:SetScript("OnEnterPressed", function(self)
@@ -109,7 +109,7 @@ local function SpellBox(parent, anchor)
     end)
     box:SetScript("OnEditFocusLost", Save)
     box:SetScript("OnEscapePressed", function(self)
-        self:SetText(SQG.db.hunt.spell or "")
+        self:SetText(SQG:GetHuntSpell())
         self:ClearFocus()
     end)
 
@@ -182,22 +182,47 @@ end
 ---------------------------------------------------------------------------
 -- Panel
 ---------------------------------------------------------------------------
+local CONTENT_WIDTH = 600
+local CONTENT_HEIGHT = 1140
+
+-- The page is taller than the settings canvas, so widgets live on a
+-- scrolling content frame.
+local function ScrollingContent(panel)
+    local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 0, -4)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(CONTENT_WIDTH, CONTENT_HEIGHT)
+    scroll:SetScrollChild(content)
+    -- After a profile switch/copy/reset, re-show the widgets so each one
+    -- re-reads its value (they all load in OnShow).
+    SQG:OnProfileChanged(function()
+        if content:IsVisible() then
+            content:Hide()
+            content:Show()
+        end
+    end)
+    return content
+end
+
 local function BuildPanel()
-    local panel = CreateFrame("Frame")
-    panel.name = TITLE
+    local outer = CreateFrame("Frame")
+    outer.name = TITLE
+    local panel = ScrollingContent(outer)
 
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
     title:SetPoint("TOPLEFT", LEFT, -16)
     title:SetText(TITLE)
 
-    local db = SQG.db
+    -- Profile ---------------------------------------------------------------
+    local profiles = SQG.ProfilesSection:Create(panel, title)
 
     -- Minimap ---------------------------------------------------------------
-    local minimapHeader = Header(panel, "Minimap pins", title)
+    local minimapHeader = Header(panel, "Minimap pins", profiles, -28)
     local enabled = Checkbox(panel, "Ctrl+click Questie minimap pins to target the NPC", nil, minimapHeader,
-        function() return db.enabled end, function(v) db.enabled = v end)
+        function() return SQG.db.enabled end, function(v) SQG.db.enabled = v end)
     local hint = Checkbox(panel, "Show \"Ctrl-click to target\" in pin tooltips", nil, enabled,
-        function() return db.tooltipHint end, function(v) db.tooltipHint = v end)
+        function() return SQG.db.tooltipHint end, function(v) SQG.db.tooltipHint = v end)
 
     -- Hunt button -----------------------------------------------------------
     local huntHeader = Header(panel, "Quest hunt button", hint)
@@ -207,18 +232,20 @@ local function BuildPanel()
         "\"Edit priority order...\" in that menu or /sqg list. Changes made in combat apply when combat ends.",
         huntHeader)
     local show = Checkbox(panel, "Show hunt button", nil, huntNote,
-        function() return db.hunt.show end, function(v) db.hunt.show = v end)
+        function() return SQG.db.hunt.show end, function(v) SQG.db.hunt.show = v end)
     local lock = Checkbox(panel, "Lock position", "When unlocked, Shift+drag the button to move it.", show,
-        function() return db.hunt.locked end, function(v) db.hunt.locked = v end)
+        function() return SQG.db.hunt.locked end, function(v) SQG.db.hunt.locked = v end)
     local attack = Checkbox(panel, "Start auto-attack on hostile targets", nil, lock,
-        function() return db.hunt.autoAttack end, function(v) db.hunt.autoAttack = v end)
+        function() return SQG.db.hunt.autoAttack end, function(v) SQG.db.hunt.autoAttack = v end)
     local spellBox = SpellBox(panel, attack)
     local slider = ScaleSlider(panel, spellBox)
-
-    Note(panel, "Keybind: Options -> Keybindings -> Select Quest Giver -> \"Hunt quest mob\".",
+    local keybind = Note(panel, "Keybind: Options -> Keybindings -> Select Quest Giver -> \"Hunt quest mob\".",
         slider, -28)
 
-    return panel
+    -- Hunt macro --------------------------------------------------------------
+    SQG.MacroEditor:Create(panel, keybind)
+
+    return outer
 end
 
 function OptionsPanel:Register()

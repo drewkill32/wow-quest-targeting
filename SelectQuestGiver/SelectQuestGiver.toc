@@ -8,6 +8,7 @@
 ## SavedVariablesPerCharacter: SelectQuestGiverCharDB
 
 Core.lua
+ProfileStore.lua
 
 # Questie adapters
 Providers/QuestiePinProvider.lua
@@ -20,6 +21,7 @@ TooltipHint.lua
 
 # Quest hunt button
 Hunt/HuntMacroBuilder.lua
+Hunt/HuntStyle.lua
 Hunt/HuntSelection.lua
 Hunt/HuntMenu.lua
 Hunt/HuntButton.lua
@@ -27,5 +29,7 @@ Hunt/HuntListWindow.lua
 Hunt/HuntMobPicker.lua
 Hunt/HuntController.lua
 
+Options/MacroEditor.lua
+Options/ProfilesSection.lua
 Options/OptionsPanel.lua
 Init.lua

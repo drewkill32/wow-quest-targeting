@@ -29,11 +29,11 @@ end
 
 local function SavePosition()
     local point, _, relativePoint, x, y = button:GetPoint(1)
-    SQG.charDb.huntPosition = { point = point, relativePoint = relativePoint, x = x, y = y }
+    SQG.db.hunt.position = { point = point, relativePoint = relativePoint, x = x, y = y }
 end
 
 local function RestorePosition()
-    local pos = SQG.charDb.huntPosition
+    local pos = SQG.db.hunt.position
     button:ClearAllPoints()
     if pos then
         button:SetPoint(pos.point, UIParent, pos.relativePoint, pos.x, pos.y)
@@ -48,36 +48,44 @@ end
 local function ShowTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine("Quest Hunt")
+    if model.macro and model.macro.custom then
+        GameTooltip:AddLine("Custom macro in use (set in Options)", 1, 0.53, 0)
+    end
     if model.activeQuests == 0 then
-        GameTooltip:AddLine("No mobs checked", 0.6, 0.6, 0.6)
+        GameTooltip:AddLine("Nothing checked", 0.6, 0.6, 0.6)
     end
     for _, quest in ipairs(model.quests) do
         if quest.state ~= "none" then
             GameTooltip:AddLine(quest.title, 1, 0.82, 0)
             for _, group in ipairs(quest.groups) do
                 for _, mob in ipairs(group.mobs) do
-                    if mob.state == "used" then
-                        GameTooltip:AddLine("  " .. mob.name, 1, 1, 1)
-                    elseif mob.state == "overflow" then
-                        GameTooltip:AddLine("  " .. mob.name .. " (macro full)", 1, 0.53, 0)
+                    if mob.state ~= "off" then
+                        GameTooltip:AddLine("  " .. SQG.HuntStyle.MobText(mob.name, mob.state == "overflow", mob.kind), 1, 1, 1)
                     end
                 end
             end
         end
     end
     GameTooltip:AddLine(" ")
-    GameTooltip:AddLine("Left-click / keybind: target & attack", 0.43, 0.43, 0.43)
-    GameTooltip:AddLine("Right-click: choose mobs", 0.43, 0.43, 0.43)
+    GameTooltip:AddLine("Left-click / keybind: target (& attack mobs)", 0.43, 0.43, 0.43)
+    GameTooltip:AddLine("Right-click: choose targets", 0.43, 0.43, 0.43)
     if not SQG.db.hunt.locked then
         GameTooltip:AddLine("Shift-drag: move", 0.43, 0.43, 0.43)
     end
     GameTooltip:Show()
 end
 
+-- The button shows what a press does: turn-in / talk icon when the
+-- top-priority target is an NPC, otherwise the spell (or default) icon.
+local function UpdateIcon()
+    local npcIcon = SQG.HuntStyle.KIND_ICONS[model.topKind]
+    icon:SetTexture(npcIcon or GetSpellIcon(SQG:GetHuntSpell()) or DEFAULT_ICON)
+end
+
 -- Text under the button: the one active quest, a count, or a hint.
 local function SummaryText()
     if model.activeQuests == 0 then
-        return "|cff888888Right-click to pick mobs|r"
+        return "|cff888888Right-click to pick targets|r"
     end
     if model.activeQuests == 1 then
         for _, quest in ipairs(model.quests) do
@@ -89,7 +97,15 @@ local function SummaryText()
     return string.format("%d quests", model.activeQuests)
 end
 
-local function PostClick(_, mouseButton, down)
+-- Debug trace of each press: whether it runs, and what it targeted.
+local function PreClick(self, mouseButton, down)
+    SQG:Debug("Hunt click: %s %s, target before: %s", mouseButton, down and "down" or "up",
+        UnitName("target") or "none")
+end
+
+local function PostClick(self, mouseButton, down)
+    SQG:Debug("Hunt click done: target after: %s (macro %d chars)", UnitName("target") or "none",
+        #(self:GetAttribute("*macrotext1") or ""))
     if mouseButton == "RightButton" and not down and not InCombatLockdown() then
         SQG.HuntMenu:Open(button, callbacks)
     end
@@ -140,6 +156,7 @@ function HuntButton:Create(controllerCallbacks)
 
     button:SetScript("OnEnter", ShowTooltip)
     button:SetScript("OnLeave", GameTooltip_Hide)
+    button:SetScript("PreClick", PreClick)
     button:SetScript("PostClick", PostClick)
     button:SetScript("OnDragStart", OnDragStart)
     button:SetScript("OnDragStop", OnDragStop)
@@ -155,7 +172,8 @@ function HuntButton:ApplySettings()
     end
     local settings = SQG.db.hunt
     button:SetScale(settings.scale)
-    icon:SetTexture(GetSpellIcon(settings.spell) or DEFAULT_ICON)
+    RestorePosition() -- each profile has its own position
+    UpdateIcon()
     button:SetShown(settings.show)
     return true
 end
@@ -168,6 +186,7 @@ function HuntButton:SetHunt(macrotext, viewModel)
     button:SetAttribute("*macrotext1", macrotext)
     model = viewModel
     label:SetText(SummaryText())
+    UpdateIcon()
     if GameTooltip:GetOwner() == button then
         ShowTooltip(button)
     end
