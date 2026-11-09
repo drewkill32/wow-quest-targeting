@@ -72,6 +72,15 @@ function commands.list()
     SQG.HuntListWindow:Toggle()
 end
 
+-- Run by the action bar macro on every press; opens the menu on right-click.
+function commands.menu()
+    SQG.HuntMacroSync:OnMenuCommand()
+end
+
+function commands.macro()
+    SQG.HuntMacroSync:Pickup()
+end
+
 function commands.options()
     SQG.OptionsPanel:Open()
 end
@@ -84,7 +93,7 @@ end
 function commands.help()
     SQG:Print("Ctrl+click a Questie minimap pin to target that NPC.")
     SQG:Print("/sqg options - settings   /sqg hunt - show/hide hunt button")
-    SQG:Print("/sqg list - hunt priority order")
+    SQG:Print("/sqg list - hunt priority order   /sqg macro - put the hunt macro on your cursor")
     SQG:Print("/sqg toggle - minimap Ctrl+click on/off   /sqg debug - debug output")
 end
 

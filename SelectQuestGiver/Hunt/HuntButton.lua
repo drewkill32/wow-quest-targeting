@@ -1,32 +1,22 @@
 -- The on-screen hunt button: a movable SecureActionButton that runs the
 -- macro built by HuntController. Left-click / keybind runs the macro,
--- right-click opens HuntMenu, Shift+drag moves it (when unlocked).
+-- right-click opens HuntMenu, drag picks up the action bar macro and
+-- Shift+drag moves the button (when unlocked).
 local _, SQG = ...
 
 local HuntButton = {}
 SQG.HuntButton = HuntButton
 
 local BUTTON_NAME = "SelectQuestGiverHuntButton"
-local DEFAULT_ICON = "Interface\\Icons\\Ability_Hunter_SniperShot"
 local SIZE = 40
 
 local button, icon, label
-local callbacks = {} -- from the controller; see HuntMenu:Open
+local callbacks = {} -- from the controller: onOpenMenu(owner), onPickupMacro()
 local model = { quests = {}, activeQuests = 0 } -- view model from HuntController
 
 ---------------------------------------------------------------------------
 -- Helpers
 ---------------------------------------------------------------------------
-local function GetSpellIcon(spell)
-    if not spell or spell == "" then
-        return nil
-    end
-    if C_Spell and C_Spell.GetSpellTexture then
-        return C_Spell.GetSpellTexture(spell)
-    end
-    return GetSpellTexture and GetSpellTexture(spell)
-end
-
 local function SavePosition()
     local point, _, relativePoint, x, y = button:GetPoint(1)
     SQG.db.hunt.position = { point = point, relativePoint = relativePoint, x = x, y = y }
@@ -48,38 +38,19 @@ end
 local function ShowTooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine("Quest Hunt")
-    if model.macro and model.macro.custom then
-        GameTooltip:AddLine("Custom macro in use (set in Options)", 1, 0.53, 0)
-    end
-    if model.activeQuests == 0 then
-        GameTooltip:AddLine("Nothing checked", 0.6, 0.6, 0.6)
-    end
-    for _, quest in ipairs(model.quests) do
-        if quest.state ~= "none" then
-            GameTooltip:AddLine(quest.title, 1, 0.82, 0)
-            for _, group in ipairs(quest.groups) do
-                for _, mob in ipairs(group.mobs) do
-                    if mob.state ~= "off" then
-                        GameTooltip:AddLine("  " .. SQG.HuntStyle.MobText(mob.name, mob.state == "overflow", mob.kind), 1, 1, 1)
-                    end
-                end
-            end
-        end
-    end
+    SQG.HuntStyle.AddTargetLines(GameTooltip, model)
     GameTooltip:AddLine(" ")
     GameTooltip:AddLine("Left-click / keybind: target (& attack mobs)", 0.43, 0.43, 0.43)
     GameTooltip:AddLine("Right-click: choose targets", 0.43, 0.43, 0.43)
+    GameTooltip:AddLine("Drag: put the macro on an action bar", 0.43, 0.43, 0.43)
     if not SQG.db.hunt.locked then
         GameTooltip:AddLine("Shift-drag: move", 0.43, 0.43, 0.43)
     end
     GameTooltip:Show()
 end
 
--- The button shows what a press does: turn-in / talk icon when the
--- top-priority target is an NPC, otherwise the spell (or default) icon.
 local function UpdateIcon()
-    local npcIcon = SQG.HuntStyle.KIND_ICONS[model.topKind]
-    icon:SetTexture(npcIcon or GetSpellIcon(SQG:GetHuntSpell()) or DEFAULT_ICON)
+    icon:SetTexture(SQG.HuntStyle.ActionIcon(model.topKind))
 end
 
 -- Text under the button: the one active quest, a count, or a hint.
@@ -107,13 +78,20 @@ local function PostClick(self, mouseButton, down)
     SQG:Debug("Hunt click done: target after: %s (macro %d chars)", UnitName("target") or "none",
         #(self:GetAttribute("*macrotext1") or ""))
     if mouseButton == "RightButton" and not down and not InCombatLockdown() then
-        SQG.HuntMenu:Open(button, callbacks)
+        callbacks.onOpenMenu(button)
     end
 end
 
 local function OnDragStart(self)
-    if IsShiftKeyDown() and not SQG.db.hunt.locked and not InCombatLockdown() then
-        self:StartMoving()
+    if InCombatLockdown() then
+        return
+    end
+    if IsShiftKeyDown() then
+        if not SQG.db.hunt.locked then
+            self:StartMoving()
+        end
+    elseif callbacks.onPickupMacro then
+        callbacks.onPickupMacro()
     end
 end
 

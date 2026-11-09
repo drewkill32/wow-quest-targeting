@@ -188,7 +188,7 @@ local function OpenModern(owner, model, callbacks)
         root:CreateButton("Edit priority order...", callbacks.onEditOrder)
         KeepOpen(root:CreateCheckbox("Start auto-attack", IsAutoAttackOn, ToggleAutoAttack))
         root:CreateButton("Uncheck all", callbacks.onClearAll)
-        root:CreateButton("Options (edit macro)...", callbacks.onOpenOptions)
+        root:CreateButton("Options...", callbacks.onOpenOptions)
     end)
 end
 
@@ -252,7 +252,7 @@ local function OpenClassic(owner, model, callbacks)
         info.text, info.notCheckable, info.func = "Uncheck all", true, callbacks.onClearAll
         UIDropDownMenu_AddButton(info)
         info = UIDropDownMenu_CreateInfo()
-        info.text, info.notCheckable, info.func = "Options (edit macro)...", true, callbacks.onOpenOptions
+        info.text, info.notCheckable, info.func = "Options...", true, callbacks.onOpenOptions
         UIDropDownMenu_AddButton(info)
     end, "MENU")
     ToggleDropDownMenu(1, nil, dropDown, owner, 0, 0)

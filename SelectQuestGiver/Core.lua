@@ -8,6 +8,7 @@ local PROFILE_DEFAULTS = {
     enabled = true,     -- Ctrl+click minimap pins
     tooltipHint = true, -- "Ctrl-click to target" line in pin tooltips
     debug = false,
+    minimap = { hide = false }, -- LibDBIcon: hide, minimapPos, lock
     hunt = {
         show = true,
         locked = false,
@@ -15,6 +16,7 @@ local PROFILE_DEFAULTS = {
         autoAttack = true,
         spell = "",       -- spell the hunt macro casts ("" = just target)
         position = nil,   -- saved button position
+        barMacroMenu = true, -- right-click on the action bar macro opens the menu
     },
 }
 

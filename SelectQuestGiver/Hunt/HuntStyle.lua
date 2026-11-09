@@ -21,6 +21,25 @@ HuntStyle.KIND_ICONS = {
     talk = "Interface\\Icons\\Ability_Warrior_BattleShout",  -- speaking face
 }
 
+HuntStyle.DEFAULT_ICON = "Interface\\Icons\\Ability_Hunter_SniperShot"
+
+local function SpellIcon(spell)
+    if not spell or spell == "" then
+        return nil
+    end
+    if C_Spell and C_Spell.GetSpellTexture then
+        return C_Spell.GetSpellTexture(spell)
+    end
+    return GetSpellTexture and GetSpellTexture(spell)
+end
+
+--- Icon for what a press does: the turn-in / talk icon when the top-priority
+--- target is an NPC, otherwise the spell's icon (or the default). Shared by
+--- the hunt button and the action bar macro. Returns a path or file ID.
+function HuntStyle.ActionIcon(topKind)
+    return HuntStyle.KIND_ICONS[topKind] or SpellIcon(SQG:GetHuntSpell()) or HuntStyle.DEFAULT_ICON
+end
+
 --- Inline icon for a target kind ("" for kill targets), cropped like an
 --- action button so the icon's border doesn't show next to text.
 function HuntStyle.KindIcon(kind, size)
@@ -52,4 +71,27 @@ function HuntStyle.OverflowNote(count, iconSize)
     local noun = count == 1 and "mob doesn't" or "mobs don't"
     return string.format("%s %s%d checked %s fit in the macro|r",
         HuntStyle.OverflowIcon(iconSize), GREY, count, noun)
+end
+
+--- Tooltip lines listing the checked targets per quest (hunt button and
+--- minimap button).
+function HuntStyle.AddTargetLines(tooltip, model)
+    if model.macro and model.macro.custom then
+        tooltip:AddLine("Custom macro in use (set in Options)", 1, 0.53, 0)
+    end
+    if (model.activeQuests or 0) == 0 then
+        tooltip:AddLine("Nothing checked", 0.6, 0.6, 0.6)
+    end
+    for _, quest in ipairs(model.quests or {}) do
+        if quest.state ~= "none" then
+            tooltip:AddLine(quest.title, 1, 0.82, 0)
+            for _, group in ipairs(quest.groups) do
+                for _, mob in ipairs(group.mobs) do
+                    if mob.state ~= "off" then
+                        tooltip:AddLine("  " .. HuntStyle.MobText(mob.name, mob.state == "overflow", mob.kind), 1, 1, 1)
+                    end
+                end
+            end
+        end
+    end
 end

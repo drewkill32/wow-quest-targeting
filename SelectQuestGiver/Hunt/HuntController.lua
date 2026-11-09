@@ -158,14 +158,16 @@ local function MacroOptions(entries)
             hasNpc = true
         end
     end
+    local rightClickMenu = SQG.HuntMacroSync:WantsRightClickMenu()
     if hasNpc and not hasMob then
-        return { retarget = true }
+        return { retarget = true, rightClickMenu = rightClickMenu }
     end
     local settings = SQG.db.hunt
     return {
         spell = ResolveSpellName(SQG:GetHuntSpell()),
         autoAttack = settings.autoAttack,
         keepConditions = hasNpc,
+        rightClickMenu = rightClickMenu,
     }
 end
 
@@ -318,21 +320,45 @@ local function WaitForQuestie(triesLeft)
     end
 end
 
+-- Callbacks for HuntMenu, wherever it's opened from.
+local menuCallbacks = {
+    getModel = function() return HuntController:GetModel() end,
+    getCurrentModel = function() return HuntController:CurrentModel() end,
+    onMobToggled = function(questId, name) HuntController:ToggleMob(questId, name) end,
+    onQuestToggled = function(questId) HuntController:ToggleQuest(questId) end,
+    onClearAll = function() HuntController:ClearAll() end,
+    onEditOrder = function() SQG.HuntListWindow:Toggle() end,
+    onPickMobs = function(questId) SQG.HuntMobPicker:Open(questId) end,
+    onOpenOptions = function() SQG.OptionsPanel:Open() end,
+}
+
+--- Opens the hunt menu anchored to `owner` (out of combat only).
+function HuntController:OpenMenu(owner)
+    if not InCombatLockdown() then
+        SQG.HuntMenu:Open(owner, menuCallbacks)
+    end
+end
+
 function HuntController:Start()
     if not SQG.QuestProvider:IsAvailable() then
         SQG:Print("Questie not found - the hunt button has no quests to pick from.")
     end
 
     SQG.HuntButton:Create({
-        getModel = function() return HuntController:GetModel() end,
-        getCurrentModel = function() return HuntController:CurrentModel() end,
-        onMobToggled = function(questId, name) HuntController:ToggleMob(questId, name) end,
-        onQuestToggled = function(questId) HuntController:ToggleQuest(questId) end,
-        onClearAll = function() HuntController:ClearAll() end,
-        onEditOrder = function() SQG.HuntListWindow:Toggle() end,
-        onPickMobs = function(questId) SQG.HuntMobPicker:Open(questId) end,
-        onOpenOptions = function() SQG.OptionsPanel:Open() end,
+        onOpenMenu = function(owner) HuntController:OpenMenu(owner) end,
+        onPickupMacro = function() SQG.HuntMacroSync:Pickup() end,
     })
+
+    SQG.HuntMacroSync:Bind({
+        onAvailabilityChanged = function() HuntController:Rebuild() end,
+        onOpenMenu = function(owner) HuntController:OpenMenu(owner) end,
+    })
+    self:AddView(SQG.HuntMacroSync)
+
+    SQG.HuntMinimapButton:Create({
+        onOpenMenu = function(owner) HuntController:OpenMenu(owner) end,
+    })
+    self:AddView(SQG.HuntMinimapButton)
 
     SQG.MacroEditor:Bind({
         getCurrentModel = function() return HuntController:CurrentModel() end,

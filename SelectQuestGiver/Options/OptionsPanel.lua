@@ -179,11 +179,31 @@ local function ScaleSlider(parent, anchor)
     return slider
 end
 
+-- Button that puts the self-updating "SQG Hunt" macro on the cursor.
+local function ActionBarMacro(parent, anchor, menuCheckbox)
+    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+    button:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -12)
+    local menu = menuCheckbox(button)
+    button:SetSize(200, 22)
+    button:SetText("Put macro on cursor")
+    button:SetScript("OnClick", function() SQG.HuntMacroSync:Pickup() end)
+
+    local note = parent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    note:SetPoint("TOPLEFT", menu, "BOTTOMLEFT", 0, -6)
+    note:SetWidth(560)
+    note:SetJustifyH("LEFT")
+    note:SetText(string.format("Creates the character macro \"%s\" (or picks it up) so you can drop it on " ..
+        "any action bar. It updates itself as your targets change. You can also drag the hunt button, " ..
+        "or type /sqg macro. The right-click menu adds two lines to the macro, which leaves room for " ..
+        "about one mob fewer.", SQG.HuntMacroSync.NAME))
+    return note
+end
+
 ---------------------------------------------------------------------------
 -- Panel
 ---------------------------------------------------------------------------
 local CONTENT_WIDTH = 600
-local CONTENT_HEIGHT = 1140
+local CONTENT_HEIGHT = 1300
 
 -- The page is taller than the settings canvas, so widgets live on a
 -- scrolling content frame.
@@ -218,14 +238,16 @@ local function BuildPanel()
     local profiles = SQG.ProfilesSection:Create(panel, title)
 
     -- Minimap ---------------------------------------------------------------
-    local minimapHeader = Header(panel, "Minimap pins", profiles, -28)
+    local minimapHeader = Header(panel, "Minimap", profiles, -28)
     local enabled = Checkbox(panel, "Ctrl+click Questie minimap pins to target the NPC", nil, minimapHeader,
         function() return SQG.db.enabled end, function(v) SQG.db.enabled = v end)
     local hint = Checkbox(panel, "Show \"Ctrl-click to target\" in pin tooltips", nil, enabled,
         function() return SQG.db.tooltipHint end, function(v) SQG.db.tooltipHint = v end)
+    local minimapButton = Checkbox(panel, "Show minimap button", "Click it to choose hunt targets.", hint,
+        function() return not SQG.db.minimap.hide end, function(v) SQG.db.minimap.hide = not v end)
 
     -- Hunt button -----------------------------------------------------------
-    local huntHeader = Header(panel, "Quest hunt button", hint)
+    local huntHeader = Header(panel, "Quest hunt button", minimapButton)
     local huntNote = Note(panel,
         "Right-click the button to check the mobs to hunt (from any quests). Each click (or keybind press) " ..
         "targets the first nearby mob in priority order, then attacks it. Change the order with " ..
@@ -242,8 +264,13 @@ local function BuildPanel()
     local keybind = Note(panel, "Keybind: Options -> Keybindings -> Select Quest Giver -> \"Hunt quest mob\".",
         slider, -28)
 
+    local barMacro = ActionBarMacro(panel, keybind, function(anchor)
+        return Checkbox(panel, "Right-click the action bar macro to open the hunt menu", nil, anchor,
+            function() return SQG.db.hunt.barMacroMenu end, function(v) SQG.db.hunt.barMacroMenu = v end)
+    end)
+
     -- Hunt macro --------------------------------------------------------------
-    SQG.MacroEditor:Create(panel, keybind)
+    SQG.MacroEditor:Create(panel, barMacro)
 
     return outer
 end

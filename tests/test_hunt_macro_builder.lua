@@ -124,6 +124,26 @@ do
         and used > 0 and EndsWith(long, "Name 1"))
 end
 
+do
+    local MENU = "/sqg menu\n/stopmacro [btn:2]\n"
+    local text = Build({ "A" }, { rightClickMenu = true, spell = "Judgement", autoAttack = true })
+    check("rightClickMenu: menu lines first", text:sub(1, #MENU) == MENU)
+    check("rightClickMenu: then the usual macro", text:sub(#MENU + 1) == Build({ "A" }, FULL))
+    local npc = Build({ "Innkeeper Farley" }, { rightClickMenu = true, retarget = true })
+    check("rightClickMenu + retarget", npc == MENU .. "/targetexact Innkeeper Farley")
+    local names = {}
+    for i = 1, 40 do names[i] = "Long Mob Name " .. i end
+    local plain, plainUsed = Build(names, FULL)
+    local withMenu, menuUsed = Build(names, { rightClickMenu = true, spell = "Judgement", autoAttack = true })
+    check("rightClickMenu: within 255", #withMenu <= Builder.MAX_LENGTH and #plain <= Builder.MAX_LENGTH)
+    check("rightClickMenu: costs room", menuUsed < plainUsed)
+
+    check("WithRightClickMenu adds lines", Builder.WithRightClickMenu("/tar X") == MENU .. "/tar X")
+    check("WithRightClickMenu is idempotent", Builder.WithRightClickMenu(MENU .. "/tar X") == MENU .. "/tar X")
+    local full = string.rep("x", 250)
+    check("WithRightClickMenu leaves a full macro alone", Builder.WithRightClickMenu(full) == full)
+end
+
 if failures > 0 then
     print(failures .. " test(s) failed")
     os.exit(1)

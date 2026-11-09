@@ -22,6 +22,9 @@
 --                   clear uses up the press's target change), so instead of
 --                   "/cleartarget" + "[noexists]" it lists plain target lines
 --                   lowest priority first: the last name found wins.
+--   rightClickMenu  start with MENU_LINES so a right-click on an action bar
+--                   copy of the macro opens the hunt menu ("/sqg menu" only
+--                   acts on right-clicks) and then stops before targeting.
 local _, SQG = ...
 
 local HuntMacroBuilder = {}
@@ -34,6 +37,8 @@ local EXACT_PREFIX = "/targetexact [noexists] "
 local SHORT_PREFIX = "/tar [noexists] "
 local RETARGET_EXACT_PREFIX = "/targetexact "
 local RETARGET_SHORT_PREFIX = "/tar "
+-- Right-click on an action bar macro: open the menu, then stop.
+HuntMacroBuilder.MENU_LINES = { "/sqg menu", "/stopmacro [btn:2]" }
 local UPGRADE_COST = #EXACT_PREFIX - #SHORT_PREFIX -- same for both forms
 
 local function Trim(text)
@@ -74,10 +79,17 @@ local function LinesLength(lines)
     return total + math.max(0, #lines - 1)
 end
 
--- How many names fit in the short form with this tail; returns count and the
--- budget left over.
-local function FitShort(names, head, shortPrefix, tail)
-    local fixed = { head }
+local function Append(lines, more)
+    for _, line in ipairs(more) do
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
+-- How many names fit in the short form between the lead and tail lines;
+-- returns count and the budget left over.
+local function FitShort(names, lead, shortPrefix, tail)
+    local fixed = Append({}, lead)
     for _, line in ipairs(tail) do
         fixed[#fixed + 1] = line
     end
@@ -96,7 +108,7 @@ end
 
 --- Builds the macro text.
 ---@param mobNames string[] names to try, in priority order
----@param options { spell: string?, autoAttack: boolean?, keepConditions: boolean?, retarget: boolean? }
+---@param options { spell: string?, autoAttack: boolean?, keepConditions: boolean?, retarget: boolean?, rightClickMenu: boolean? }
 ---@return string macrotext
 ---@return number namesUsed  how many (deduplicated) names fit
 ---@return boolean[] exact   exact[i] is true when name i uses /targetexact
@@ -106,14 +118,17 @@ function HuntMacroBuilder.Build(mobNames, options)
 
     -- 1 + 2. Most names in the short form; compact tail only if it fits more.
     local retarget = options.retarget
-    local head = not retarget and HEAD or nil
+    local lead = options.rightClickMenu and Append({}, HuntMacroBuilder.MENU_LINES) or {}
+    if not retarget then
+        lead[#lead + 1] = HEAD
+    end
     local exactPrefix = retarget and RETARGET_EXACT_PREFIX or EXACT_PREFIX
     local shortPrefix = retarget and RETARGET_SHORT_PREFIX or SHORT_PREFIX
     local tail = retarget and {} or TailLines(options, false)
-    local used, budget = FitShort(names, head, shortPrefix, tail)
+    local used, budget = FitShort(names, lead, shortPrefix, tail)
     if not options.keepConditions and not retarget then
         local compactTail = TailLines(options, true)
-        local compactUsed, compactBudget = FitShort(names, head, shortPrefix, compactTail)
+        local compactUsed, compactBudget = FitShort(names, lead, shortPrefix, compactTail)
         if compactUsed > used then
             tail, used, budget = compactTail, compactUsed, compactBudget
         end
@@ -134,7 +149,7 @@ function HuntMacroBuilder.Build(mobNames, options)
     for i = 1, used do
         targetLines[i] = (exact[i] and exactPrefix or shortPrefix) .. names[i]
     end
-    local lines = { head }
+    local lines = Append({}, lead)
     if retarget then
         -- Lowest priority first, so the highest-priority name found is the
         -- last target set.
@@ -150,4 +165,14 @@ function HuntMacroBuilder.Build(mobNames, options)
         lines[#lines + 1] = line
     end
     return table.concat(lines, "\n"), used, exact
+end
+
+--- Adds MENU_LINES to the top of a hand-written macro when they aren't there
+--- yet and still fit; otherwise returns it unchanged.
+function HuntMacroBuilder.WithRightClickMenu(text)
+    local menu = table.concat(HuntMacroBuilder.MENU_LINES, "\n")
+    if text:sub(1, #menu) == menu or #menu + 1 + #text > HuntMacroBuilder.MAX_LENGTH then
+        return text
+    end
+    return menu .. "\n" .. text
 end
