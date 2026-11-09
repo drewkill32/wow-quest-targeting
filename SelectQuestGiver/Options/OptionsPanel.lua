@@ -147,36 +147,57 @@ local function SpellBox(parent, anchor)
     return hint
 end
 
-local function ScaleSlider(parent, anchor)
-    local slider = CreateFrame("Slider", "SelectQuestGiverScaleSlider", parent, "OptionsSliderTemplate")
+-- Labelled slider bound to a setting.
+---@param spec { name: string, min: number, max: number, step: number, lowText: string, highText: string,
+---              label: fun(value): string, get: fun(): number, set: fun(value) }
+local function Slider(parent, anchor, spec)
+    local slider = CreateFrame("Slider", spec.name, parent, "OptionsSliderTemplate")
     slider:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -28)
     slider:SetWidth(220)
-    slider:SetMinMaxValues(0.5, 2)
-    slider:SetValueStep(0.05)
+    slider:SetMinMaxValues(spec.min, spec.max)
+    slider:SetValueStep(spec.step)
     slider:SetObeyStepOnDrag(true)
-    local low = _G[slider:GetName() .. "Low"]
-    local high = _G[slider:GetName() .. "High"]
-    local text = _G[slider:GetName() .. "Text"]
-    if low then low:SetText("50%") end
-    if high then high:SetText("200%") end
+    local low = _G[spec.name .. "Low"]
+    local high = _G[spec.name .. "High"]
+    local text = _G[spec.name .. "Text"]
+    if low then low:SetText(spec.lowText) end
+    if high then high:SetText(spec.highText) end
 
     local function UpdateText(value)
         if text then
-            text:SetText(string.format("Button scale: %d%%", value * 100 + 0.5))
+            text:SetText(spec.label(value))
         end
     end
     slider:SetScript("OnShow", function(self)
-        self:SetValue(SQG.db.hunt.scale)
-        UpdateText(SQG.db.hunt.scale)
+        self:SetValue(spec.get())
+        UpdateText(spec.get())
     end)
     slider:SetScript("OnValueChanged", function(_, value, userInput)
         UpdateText(value)
         if userInput then
-            SQG.db.hunt.scale = value
+            spec.set(value)
             SQG:NotifySettingsChanged()
         end
     end)
     return slider
+end
+
+local function ScaleSlider(parent, anchor)
+    return Slider(parent, anchor, {
+        name = "SelectQuestGiverScaleSlider", min = 0.5, max = 2, step = 0.05, lowText = "50%", highText = "200%",
+        label = function(value) return string.format("Button scale: %d%%", value * 100 + 0.5) end,
+        get = function() return SQG.db.hunt.scale end,
+        set = function(value) SQG.db.hunt.scale = value end,
+    })
+end
+
+local function MenuHeightSlider(parent, anchor)
+    return Slider(parent, anchor, {
+        name = "SelectQuestGiverMenuHeightSlider", min = 200, max = 1000, step = 50, lowText = "200", highText = "1000",
+        label = function(value) return string.format("Hunt menu max height: %d (scrolls past this)", value + 0.5) end,
+        get = function() return SQG.db.hunt.menuHeight end,
+        set = function(value) SQG.db.hunt.menuHeight = value end,
+    })
 end
 
 -- Button that puts the self-updating "SQG Hunt" macro on the cursor.
@@ -203,7 +224,7 @@ end
 -- Panel
 ---------------------------------------------------------------------------
 local CONTENT_WIDTH = 600
-local CONTENT_HEIGHT = 1240
+local CONTENT_HEIGHT = 1300
 
 -- The page is taller than the settings canvas, so widgets live on a
 -- scrolling content frame.
@@ -257,8 +278,9 @@ local function BuildPanel()
         function() return SQG.db.hunt.autoAttack end, function(v) SQG.db.hunt.autoAttack = v end)
     local spellBox = SpellBox(panel, attack)
     local slider = ScaleSlider(panel, spellBox)
+    local menuHeight = MenuHeightSlider(panel, slider)
     local keybind = Note(panel, "Keybind: Options -> Keybindings -> Select Quest Giver -> \"Hunt quest mob\".",
-        slider, -28)
+        menuHeight, -28)
 
     local barMacro = ActionBarMacro(panel, keybind, function(anchor)
         return Checkbox(panel, "Right-click the action bar macro to open the hunt menu", nil, anchor,

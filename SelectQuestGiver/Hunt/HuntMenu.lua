@@ -6,6 +6,9 @@
 -- shown first); the rest are reached through "More mobs..." which opens
 -- HuntMobPicker.
 --
+-- The menu is capped at the "menuHeight" setting and scrolls past that (modern menu
+-- API only; the classic UIDropDownMenu fallback can't scroll).
+--
 -- Renders the view model from HuntController:GetModel() and reports clicks
 -- through the callbacks; it never changes state itself. Checkbox states are
 -- read live from HuntSelection so they update while the menu stays open.
@@ -19,6 +22,12 @@ local OBJECTIVE_COLOR = "|cff9d9d9d"
 local INDENT_OBJECTIVE = "      "
 local INDENT_MOB = "         "
 local MAX_MOBS_PER_QUEST = 6
+-- Taller menus scroll instead of running off the screen.
+local DEFAULT_MENU_HEIGHT = 600
+
+local function MaxMenuHeight()
+    return SQG.db.hunt.menuHeight or DEFAULT_MENU_HEIGHT
+end
 
 local function QuestLabel(quest)
     return string.format("%s[%d] %s|r", QUEST_COLOR, quest.level or 0, quest.title or ("Quest " .. quest.id))
@@ -159,6 +168,9 @@ end
 
 local function OpenModern(owner, model, callbacks)
     MenuUtil.CreateContextMenu(owner, function(_, root)
+        if root.SetScrollMode then
+            root:SetScrollMode(MaxMenuHeight())
+        end
         root:CreateTitle("Hunt quest targets")
         LiveText(root:CreateTitle(SummaryLabel(model)), function() return SummaryLabel(model) end)
         if #model.quests == 0 then

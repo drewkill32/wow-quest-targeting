@@ -15,6 +15,7 @@ local PROFILE_DEFAULTS = {
         spell = "",       -- spell the hunt macro casts ("" = just target)
         position = nil,   -- saved button position
         barMacroMenu = true, -- right-click on the action bar macro opens the menu
+        menuHeight = 600, -- hunt menu max height; taller menus scroll
     },
 }
 
