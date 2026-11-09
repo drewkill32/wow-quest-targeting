@@ -144,6 +144,21 @@ do
     check("WithRightClickMenu leaves a full macro alone", Builder.WithRightClickMenu(full) == full)
 end
 
+do
+    local text = Build({ "Grizzly Bear" }, { noDead = true })
+    check("noDead adds nodead to target lines",
+        text == "/cleartarget [dead]\n/targetexact [noexists,nodead] Grizzly Bear")
+    text = Build({ "Marshal Dughan", "Guard" }, { retarget = true, noDead = true })
+    check("noDead with retarget", text == "/targetexact [nodead] Guard\n/targetexact [nodead] Marshal Dughan")
+    text = Build({ "Marshal Dughan" }, { retarget = true })
+    check("retarget without noDead has no conditions", text == "/targetexact Marshal Dughan")
+    local names = {}
+    for i = 1, 30 do names[i] = "Mob Number " .. i end
+    local _, plain = Build(names, FULL)
+    local _, fewer = Build(names, { spell = "Judgement", autoAttack = true, noDead = true })
+    check("noDead fits fewer names", fewer < plain)
+end
+
 if failures > 0 then
     print(failures .. " test(s) failed")
     os.exit(1)

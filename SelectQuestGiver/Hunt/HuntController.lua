@@ -158,15 +158,16 @@ local function MacroOptions(entries)
             hasNpc = true
         end
     end
+    local settings = SQG.db.hunt
     local rightClickMenu = SQG.HuntMacroSync:WantsRightClickMenu()
     if hasNpc and not hasMob then
-        return { retarget = true, rightClickMenu = rightClickMenu }
+        return { retarget = true, noDead = settings.targetNoDead, rightClickMenu = rightClickMenu }
     end
-    local settings = SQG.db.hunt
     return {
         spell = ResolveSpellName(SQG:GetHuntSpell()),
         autoAttack = settings.autoAttack,
         keepConditions = hasNpc,
+        noDead = settings.targetNoDead,
         rightClickMenu = rightClickMenu,
     }
 end

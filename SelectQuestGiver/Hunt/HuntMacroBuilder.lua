@@ -22,6 +22,9 @@
 --                   clear uses up the press's target change), so instead of
 --                   "/cleartarget" + "[noexists]" it lists plain target lines
 --                   lowest priority first: the last name found wins.
+--   noDead          add "nodead" to the target conditions
+--                   ("/tar [noexists,nodead] Name", "/tar [nodead] Name" when
+--                   retargeting). Costs 7-9 characters per name.
 --   rightClickMenu  start with MENU_LINES so a right-click on an action bar
 --                   copy of the macro opens the hunt menu ("/sqg menu" only
 --                   acts on right-clicks) and then stops before targeting.
@@ -33,13 +36,25 @@ SQG.HuntMacroBuilder = HuntMacroBuilder
 HuntMacroBuilder.MAX_LENGTH = 255
 
 local HEAD = "/cleartarget [dead]"
-local EXACT_PREFIX = "/targetexact [noexists] "
-local SHORT_PREFIX = "/tar [noexists] "
-local RETARGET_EXACT_PREFIX = "/targetexact "
-local RETARGET_SHORT_PREFIX = "/tar "
+local EXACT_COMMAND = "/targetexact "
+local SHORT_COMMAND = "/tar "
 -- Right-click on an action bar macro: open the menu, then stop.
 HuntMacroBuilder.MENU_LINES = { "/sqg menu", "/stopmacro [btn:2]" }
-local UPGRADE_COST = #EXACT_PREFIX - #SHORT_PREFIX -- same for both forms
+local UPGRADE_COST = #EXACT_COMMAND - #SHORT_COMMAND -- same whatever the conditions
+
+-- Exact and short target-line prefixes for the options, e.g.
+-- "/targetexact [noexists] " and "/tar [noexists] ".
+local function TargetPrefixes(options)
+    local conditions = {}
+    if not options.retarget then
+        conditions[#conditions + 1] = "noexists"
+    end
+    if options.noDead then
+        conditions[#conditions + 1] = "nodead"
+    end
+    local condition = #conditions > 0 and ("[" .. table.concat(conditions, ",") .. "] ") or ""
+    return EXACT_COMMAND .. condition, SHORT_COMMAND .. condition
+end
 
 local function Trim(text)
     return (text or ""):match("^%s*(.-)%s*$")
@@ -108,7 +123,7 @@ end
 
 --- Builds the macro text.
 ---@param mobNames string[] names to try, in priority order
----@param options { spell: string?, autoAttack: boolean?, keepConditions: boolean?, retarget: boolean?, rightClickMenu: boolean? }
+---@param options { spell: string?, autoAttack: boolean?, keepConditions: boolean?, retarget: boolean?, noDead: boolean?, rightClickMenu: boolean? }
 ---@return string macrotext
 ---@return number namesUsed  how many (deduplicated) names fit
 ---@return boolean[] exact   exact[i] is true when name i uses /targetexact
@@ -122,8 +137,7 @@ function HuntMacroBuilder.Build(mobNames, options)
     if not retarget then
         lead[#lead + 1] = HEAD
     end
-    local exactPrefix = retarget and RETARGET_EXACT_PREFIX or EXACT_PREFIX
-    local shortPrefix = retarget and RETARGET_SHORT_PREFIX or SHORT_PREFIX
+    local exactPrefix, shortPrefix = TargetPrefixes(options)
     local tail = retarget and {} or TailLines(options, false)
     local used, budget = FitShort(names, lead, shortPrefix, tail)
     if not options.keepConditions and not retarget then

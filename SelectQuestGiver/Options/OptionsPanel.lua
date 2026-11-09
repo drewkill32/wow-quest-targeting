@@ -224,7 +224,7 @@ end
 -- Panel
 ---------------------------------------------------------------------------
 local CONTENT_WIDTH = 600
-local CONTENT_HEIGHT = 1300
+local CONTENT_HEIGHT = 1330
 
 -- The page is taller than the settings canvas, so widgets live on a
 -- scrolling content frame.
@@ -276,7 +276,11 @@ local function BuildPanel()
         function() return SQG.db.hunt.locked end, function(v) SQG.db.hunt.locked = v end)
     local attack = Checkbox(panel, "Start auto-attack on hostile targets", nil, lock,
         function() return SQG.db.hunt.autoAttack end, function(v) SQG.db.hunt.autoAttack = v end)
-    local spellBox = SpellBox(panel, attack)
+    local noDead = Checkbox(panel, "Add [nodead] to target lines",
+        "Each target line becomes \"/tar [noexists,nodead] Name\". Uses 7 more characters per mob, " ..
+        "so fewer mobs fit in the macro.", attack,
+        function() return SQG.db.hunt.targetNoDead end, function(v) SQG.db.hunt.targetNoDead = v end)
+    local spellBox = SpellBox(panel, noDead)
     local slider = ScaleSlider(panel, spellBox)
     local menuHeight = MenuHeightSlider(panel, slider)
     local keybind = Note(panel, "Keybind: Options -> Keybindings -> Select Quest Giver -> \"Hunt quest mob\".",

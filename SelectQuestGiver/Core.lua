@@ -12,6 +12,7 @@ local PROFILE_DEFAULTS = {
         locked = false,
         scale = 1,
         autoAttack = true,
+        targetNoDead = false, -- add [nodead] to the target lines
         spell = "",       -- spell the hunt macro casts ("" = just target)
         position = nil,   -- saved button position
         barMacroMenu = true, -- right-click on the action bar macro opens the menu
