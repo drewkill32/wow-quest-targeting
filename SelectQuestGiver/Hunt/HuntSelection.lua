@@ -99,7 +99,7 @@ end
 --- Converts older saved formats into the ordered list:
 ---   v1: huntQuestId + huntExcluded[questId][name]  (one quest, unchecked mobs)
 ---   v2: huntIncluded[questId][name]                (checked mobs, no order)
---- Needs current mob names, so it waits until Questie has the quest log.
+--- Needs current mob names, so it waits until the quest log is loaded.
 ---@param quests table[]  huntable quests in menu order: { id, groups = { { mobNames } } }
 function HuntSelection:MigrateLegacy(quests)
     local charDb = SQG.charDb

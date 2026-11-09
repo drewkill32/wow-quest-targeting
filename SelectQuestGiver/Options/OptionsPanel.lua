@@ -203,7 +203,7 @@ end
 -- Panel
 ---------------------------------------------------------------------------
 local CONTENT_WIDTH = 600
-local CONTENT_HEIGHT = 1300
+local CONTENT_HEIGHT = 1240
 
 -- The page is taller than the settings canvas, so widgets live on a
 -- scrolling content frame.
@@ -239,11 +239,7 @@ local function BuildPanel()
 
     -- Minimap ---------------------------------------------------------------
     local minimapHeader = Header(panel, "Minimap", profiles, -28)
-    local enabled = Checkbox(panel, "Ctrl+click Questie minimap pins to target the NPC", nil, minimapHeader,
-        function() return SQG.db.enabled end, function(v) SQG.db.enabled = v end)
-    local hint = Checkbox(panel, "Show \"Ctrl-click to target\" in pin tooltips", nil, enabled,
-        function() return SQG.db.tooltipHint end, function(v) SQG.db.tooltipHint = v end)
-    local minimapButton = Checkbox(panel, "Show minimap button", "Click it to choose hunt targets.", hint,
+    local minimapButton = Checkbox(panel, "Show minimap button", "Click it to choose hunt targets.", minimapHeader,
         function() return not SQG.db.minimap.hide end, function(v) SQG.db.minimap.hide = not v end)
 
     -- Hunt button -----------------------------------------------------------

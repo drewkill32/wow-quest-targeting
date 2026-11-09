@@ -5,14 +5,6 @@ local events = CreateFrame("Frame")
 
 local handlers = {}
 
-local function ApplyMinimapSetting(db)
-    if db.enabled then
-        SQG.HoverController:Start()
-    else
-        SQG.HoverController:Stop()
-    end
-end
-
 function handlers.ADDON_LOADED(loadedName)
     if loadedName ~= ADDON_NAME then
         return
@@ -21,26 +13,9 @@ function handlers.ADDON_LOADED(loadedName)
 
     SQG:LoadSettings()
 
-    -- Minimap Ctrl+click targeting
-    SQG.SecureTargetButton:Create()
-    SQG.TooltipHint:Install()
-    ApplyMinimapSetting(SQG.db)
-    SQG:OnSettingsChanged(ApplyMinimapSetting)
-
-    -- Quest hunt button
     SQG.HuntController:Start()
 
     SQG.OptionsPanel:Register()
-end
-
--- Fires just before combat lockdown starts: last chance to hide the
--- secure button so it doesn't block pin clicks during combat.
-function handlers.PLAYER_REGEN_DISABLED()
-    SQG.SecureTargetButton:Detach()
-end
-
-function handlers.MODIFIER_STATE_CHANGED()
-    SQG.HoverController:Update()
 end
 
 events:SetScript("OnEvent", function(_, event, ...)
@@ -54,12 +29,6 @@ end
 -- Slash commands
 ---------------------------------------------------------------------------
 local commands = {}
-
-function commands.toggle()
-    SQG.db.enabled = not SQG.db.enabled
-    SQG:NotifySettingsChanged()
-    SQG:Print("minimap Ctrl+click %s", SQG.db.enabled and "enabled" or "disabled")
-end
 
 function commands.hunt()
     SQG.db.hunt.show = not SQG.db.hunt.show
@@ -91,10 +60,9 @@ function commands.debug()
 end
 
 function commands.help()
-    SQG:Print("Ctrl+click a Questie minimap pin to target that NPC.")
     SQG:Print("/sqg options - settings   /sqg hunt - show/hide hunt button")
     SQG:Print("/sqg list - hunt priority order   /sqg macro - put the hunt macro on your cursor")
-    SQG:Print("/sqg toggle - minimap Ctrl+click on/off   /sqg debug - debug output")
+    SQG:Print("/sqg debug - debug output")
 end
 
 SLASH_SELECTQUESTGIVER1 = "/sqg"

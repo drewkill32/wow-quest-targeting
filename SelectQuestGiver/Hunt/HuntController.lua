@@ -61,11 +61,11 @@ local function ActiveMobs(quests)
 end
 
 -- Checked entries that are still huntable, in priority order.
-local function ActiveEntries(active, questieReady)
+local function ActiveEntries(active, logReady)
     local entries = {}
     for storeIndex, entry in ipairs(SQG.HuntSelection:GetOrdered()) do
         local kind = active[entry.questId] and active[entry.questId][entry.name]
-        if kind or not questieReady then
+        if kind or not logReady then
             entries[#entries + 1] = {
                 storeIndex = storeIndex,
                 questId = entry.questId,
@@ -180,18 +180,18 @@ function HuntController:Rebuild()
 
     local provider = SQG.QuestProvider
     local quests = provider:GetHuntableQuests()
-    local questieReady = provider:IsReady()
+    local logReady = provider:IsReady()
     local active = ActiveMobs(quests)
 
     SQG.HuntSelection:MigrateLegacy(quests)
-    if questieReady then
+    if logReady then
         -- Drop checked mobs whose quest left the log or objective is done.
         SQG.HuntSelection:Prune(function(questId, name)
             return (active[questId] and active[questId][name]) ~= nil
         end)
     end
 
-    local entries = ActiveEntries(active, questieReady)
+    local entries = ActiveEntries(active, logReady)
     local orderedNames = {}
     for _, entry in ipairs(entries) do
         orderedNames[#orderedNames + 1] = entry.name
@@ -304,19 +304,19 @@ function HuntController:CurrentModel()
     return model
 end
 
--- Questie reads the quest log in the background for a few seconds after
+-- The quest log can be empty for a few seconds after
 -- login/reload, often after the last QUEST_LOG_UPDATE. Poll until its cache
 -- has quests so the button's label and macro are right without user input.
 local READY_POLL_INTERVAL = 2
 local READY_POLL_LIMIT = 30 -- tries (one minute)
 
-local function WaitForQuestie(triesLeft)
+local function WaitForQuestLog(triesLeft)
     if SQG.QuestProvider:IsReady() then
         HuntController:Rebuild()
         return
     end
     if triesLeft > 0 then
-        C_Timer.After(READY_POLL_INTERVAL, function() WaitForQuestie(triesLeft - 1) end)
+        C_Timer.After(READY_POLL_INTERVAL, function() WaitForQuestLog(triesLeft - 1) end)
     end
 end
 
@@ -341,7 +341,7 @@ end
 
 function HuntController:Start()
     if not SQG.QuestProvider:IsAvailable() then
-        SQG:Print("Questie not found - the hunt button has no quests to pick from.")
+        SQG:Print("QuestieDB not found - the hunt button has no quests to pick from.")
     end
 
     SQG.HuntButton:Create({
@@ -404,5 +404,5 @@ function HuntController:Start()
     end)
 
     self:Rebuild()
-    WaitForQuestie(READY_POLL_LIMIT)
+    WaitForQuestLog(READY_POLL_LIMIT)
 end

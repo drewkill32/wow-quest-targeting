@@ -1,12 +1,10 @@
--- Core: addon namespace, settings, logging and the pin-provider registry.
+-- Core: addon namespace, settings and logging.
 local ADDON_NAME, SQG = ...
 
 SQG.name = ADDON_NAME
 
 -- Settings kept in the active profile (see ProfileStore).
 local PROFILE_DEFAULTS = {
-    enabled = true,     -- Ctrl+click minimap pins
-    tooltipHint = true, -- "Ctrl-click to target" line in pin tooltips
     debug = false,
     minimap = { hide = false }, -- LibDBIcon: hide, minimapPos, lock
     hunt = {
@@ -150,46 +148,5 @@ end
 function SQG:Debug(fmt, ...)
     if self.db and self.db.debug then
         self:Print("|cff888888" .. fmt .. "|r", ...)
-    end
-end
-
----------------------------------------------------------------------------
--- Pin providers
--- A provider is a table with:
---   provider.name                       string
---   provider:IsAvailable()              -> boolean (its map addon is loaded)
---   provider:ResolveUnitName(frame)     -> string|nil  NPC name if `frame` is
---                                          one of its minimap pins for an NPC
---   provider:GetTooltipPin(tooltip)     -> frame|nil   the pin a tooltip is
---                                          currently showing, if it's theirs
----------------------------------------------------------------------------
-SQG.providers = {}
-
-function SQG:RegisterProvider(provider)
-    table.insert(self.providers, provider)
-end
-
---- Returns the NPC name for a hovered frame, asking each available provider.
-function SQG:ResolveUnitName(frame)
-    for _, provider in ipairs(self.providers) do
-        if provider:IsAvailable() then
-            local unitName = provider:ResolveUnitName(frame)
-            if unitName then
-                return unitName, provider
-            end
-        end
-    end
-end
-
---- Returns the NPC name for the pin a tooltip is showing, if any.
-function SQG:ResolveTooltipUnitName(tooltip)
-    for _, provider in ipairs(self.providers) do
-        if provider:IsAvailable() then
-            local pin = provider:GetTooltipPin(tooltip)
-            local unitName = pin and provider:ResolveUnitName(pin)
-            if unitName then
-                return unitName, provider
-            end
-        end
     end
 end
