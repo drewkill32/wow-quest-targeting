@@ -8,7 +8,7 @@
 --   db.Quest.objectives(id)  = { [1] creatures {npcId, text?}, [2] objects, [3] items {itemId, text?},
 --                                [4] reputation, [5] kill credit {npcIds, rootNpcId, text?}, ... }
 --   db.Quest.finishedBy(id)  = { [1] npcIds, [2] objectIds }
---   db.Npc.name(id), db.Npc.friendlyToFaction(id) -> "A" | "H" | "AH" | nil
+--   db.Npc.name(id), db.Npc.friendlyToFaction(id) -> "A" | "H" | "AH" | nil, db.Npc.npcFlags(id)
 --   db.Item.name(id), db.Item.npcDrops(id) -> npcIds
 --
 -- Target kinds:
@@ -73,9 +73,17 @@ end
 -- Database objectives -> candidates that log objectives are matched against
 ---------------------------------------------------------------------------
 -- Each candidate: { names = { matchable texts }, targets = { { npcId, kind } } }
+-- Friendly = someone you talk to rather than fight: friendly to the
+-- player's faction AND offering something (gossip, quests, vendor...).
+-- The faction check alone isn't enough: neutral beasts such as Zhevra
+-- Runner or Young Wolf are "AH" too, but they have no NPC flags.
 function QuestTargetResolver:IsFriendly(npcId)
     local factions = self.db.Npc.friendlyToFaction(npcId)
-    return type(factions) == "string" and factions:find(self.faction, 1, true) ~= nil
+    if type(factions) ~= "string" or not factions:find(self.faction, 1, true) then
+        return false
+    end
+    local flags = self.db.Npc.npcFlags and self.db.Npc.npcFlags(npcId)
+    return type(flags) == "number" and flags ~= 0
 end
 
 function QuestTargetResolver:CreatureCandidate(objective)

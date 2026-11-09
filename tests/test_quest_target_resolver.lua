@@ -14,17 +14,19 @@ local npcs = {
     [1] = { name = "Kobold Vermin" },
     [2] = { name = "Grizzled Bear" },
     [3] = { name = "Young Bear" },
-    [4] = { name = "Marshal Dughan", friendly = "A" },
-    [5] = { name = "Innkeeper Farley", friendly = "AH" },
+    [4] = { name = "Marshal Dughan", friendly = "A", flags = 2 },
+    [5] = { name = "Innkeeper Farley", friendly = "AH", flags = 3 },
     [6] = { name = "Goretusk" },
-    [7] = { name = "Vendor Joe", friendly = "AH" },
+    [7] = { name = "Vendor Joe", friendly = "AH", flags = 128 },
     [8] = { name = "Dummy Credit" },
     [9] = { name = "Totem Target A" },
     [10] = { name = "Totem Target B" },
+    [11] = { name = "Zhevra Runner", friendly = "AH" }, -- neutral beast: no NPC flags
 }
 local items = {
     [100] = { name = "Grizzled Bear Heart", drops = { 2, 3, 7 } },
     [101] = { name = "Goretusk Liver", drops = { 6 } },
+    [102] = { name = "Zhevra Hooves", drops = { 11 } },
 }
 local quests = {
     [10] = { objectives = { { { 1 } }, nil, { { 100 } } } },
@@ -32,6 +34,7 @@ local quests = {
     [12] = { objectives = {}, finishedBy = { { 5, 4 } } },
     [13] = { objectives = { nil, nil, { { 101 }, { 100 } } } },
     [14] = { objectives = { [5] = { { { 9, 10 }, 8, "Totems tested" } } } },
+    [16] = { objectives = { { { 11 } }, nil, { { 102 } } } },
 }
 local db = {
     Quest = {
@@ -41,6 +44,7 @@ local db = {
     Npc = {
         name = function(id) return npcs[id] and npcs[id].name end,
         friendlyToFaction = function(id) return npcs[id] and npcs[id].friendly end,
+        npcFlags = function(id) return npcs[id] and npcs[id].flags end,
     },
     Item = {
         name = function(id) return items[id] and items[id].name end,
@@ -128,6 +132,18 @@ do
         { text = "Marshal Dughan", type = "monster", finished = false },
     } })
     check("talk first", groups[1].kind == "talk" and groups[2].kind == "kill")
+end
+
+do
+    -- Neutral beasts are "AH" but have no NPC flags: still kill targets.
+    local groups = resolver:Resolve({ id = 16, objectives = {
+        { text = "Zhevra Hooves: 0/4", type = "item", finished = false },
+    } })
+    check("neutral beast drops item", #groups == 1 and groups[1].kind == "kill" and Names(groups[1]) == "Zhevra Runner")
+    groups = resolver:Resolve({ id = 16, objectives = {
+        { text = "Zhevra Runner slain: 0/4", type = "monster", finished = false },
+    } })
+    check("neutral beast kill objective is kill", #groups == 1 and groups[1].kind == "kill")
 end
 
 if failures > 0 then
